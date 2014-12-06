@@ -1,0 +1,38 @@
+#! /bin/sh
+# /etc/init.d/raspi-vid
+
+
+start() {
+# -n means don't show preview on console; -rot 180 to make image right-side-up
+# run a loop because this command dies unless it can connect to a listener
+    while /bin/true; do
+#
+# act as super-simple server listening on port 5001 using nc
+# -n means don't show preview on console;
+# -b (bitrate) of 1000000 (~ 1 mbit) seems adequate for our 1280x720 video image
+# so is -fps 15 (15 frames per second)
+# To view output fire up mplayer on a PC. I personally use this command on my PC:
+# c:\apps\netcat\nc 192.168.2.100 443|c:\apps\smplayer\mplayer\mplayer -ontop -fps 60 -vo gl -cache 1024 -geometry 600:50 -noborder -msglevel all=0 -
+      raspivid -n -o - -t 0 -rot 0 -w 1280 -h 720 -b 1000000 -fps 15 | nc -l 5001
+# or use hello_video_simple
+      sleep 1;
+    done
+}
+
+# The following part carries out specific functions depending on arguments.
+case "$1" in
+  start)
+    echo "Starting rasip-vid"
+    start &
+    ;;
+  stop)
+    echo "Stopping rasip-vid"
+    pkill 'raspi-?vid'
+    ;;
+  *)
+    echo "Usage: /etc/init.d/rasip-vid {start|stop}"
+    exit 1
+    ;;
+esac
+ 
+exit 0

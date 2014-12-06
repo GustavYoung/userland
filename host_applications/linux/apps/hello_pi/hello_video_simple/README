@@ -1,0 +1,15 @@
+To stream with low latency from camera.
+
+To set up camera server than runs from boot, on "camera" pi, run
+sudo cp raspi-vid /etc/init.d; cd /etc/init.d; sudo chmod +x raspi-vid; sudo update-rc.d raspi-vid defaults
+
+Alternatively to just launch on demand, run
+./raspi-vid start  
+
+The camera server is based on suggestion from: https://drjohnstechtalk.com/blog/2014/02/screaming-streaming-on-the-raspberry-pi/
+
+On the "display" pi run
+nc 192.168.0.101 5001 | ./hello_video_simple
+
+Streams with about 200ms latency and low cpu.
+
