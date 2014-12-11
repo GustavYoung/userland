@@ -25,7 +25,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-// OpenGL|ES 2 demo using shader to compute particle/julia sets
+// OpenGL|ES 2 demo using shader to compute particle/render sets
 // Thanks to Peter de Rivas for original Python code
 
 #include <stdio.h>
@@ -72,12 +72,12 @@ typedef struct
    GLuint fshader;
    GLuint mshader;
    GLuint program;
-   GLuint program2;
+   GLuint program_particle;
    GLuint tex_fb;
    GLuint tex;
    GLuint buf;
    GLuint particleBuffer;
-// julia attribs
+// render attribs
    GLuint unif_color, attr_vertex, unif_scale, unif_offset, unif_tex, unif_centre, uRotationMatrix; 
 // particle attribs
    GLuint aTheta, uProjectionMatrix, uK, aShade, uColor, uTime;
@@ -257,7 +257,7 @@ static void init_shaders(CUBE_STATE_T *state)
 	"    gl_FragColor = color;"
 	"}";
 
-   const GLchar *julia_vshader_source =
+   const GLchar *render_vshader_source =
               "attribute vec4 vertex;"
               "varying vec2 tcoord;"
               "uniform mat4 uRotationMatrix;"
@@ -269,23 +269,23 @@ static void init_shaders(CUBE_STATE_T *state)
 	      " tcoord = r.xy;"
               "}";
       
-   // Julia
-   const GLchar *julia_fshader_source =
-"uniform vec4 color;"
-"uniform vec2 scale;"
-"uniform vec2 centre;"
-"uniform vec2 offset;"
-"varying vec2 tcoord;"
-"uniform sampler2D tex;"
-"void main(void) {"
-"  vec4 color2;"
-"  color2 = texture2D(tex,tcoord);"
-//"  gl_FragColor = max(color2 - 0.05, 0.0);"
-"  gl_FragColor = color2 * 0.9;"
-"}";
+   // Render
+   const GLchar *render_fshader_source =
+	"uniform vec4 color;"
+	"uniform vec2 scale;"
+	"uniform vec2 centre;"
+	"uniform vec2 offset;"
+	"varying vec2 tcoord;"
+	"uniform sampler2D tex;"
+	"void main(void) {"
+	"  vec4 color2;"
+	"  color2 = texture2D(tex,tcoord);"
+	//"  gl_FragColor = max(color2 - 0.05, 0.0);"
+	"  gl_FragColor = color2 * 0.9;"
+	"}";
 
         state->vshader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(state->vshader, 1, &julia_vshader_source, 0);
+        glShaderSource(state->vshader, 1, &render_vshader_source, 0);
         glCompileShader(state->vshader);
         check();
 
@@ -301,7 +301,7 @@ static void init_shaders(CUBE_STATE_T *state)
             showlog(state->mvshader);
             
         state->fshader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(state->fshader, 1, &julia_fshader_source, 0);
+        glShaderSource(state->fshader, 1, &render_fshader_source, 0);
         glCompileShader(state->fshader);
         check();
 
@@ -316,7 +316,7 @@ static void init_shaders(CUBE_STATE_T *state)
         if (state->verbose)
             showlog(state->mshader);
 
-        // julia 
+        // render
         state->program = glCreateProgram();
         glAttachShader(state->program, state->vshader);
         glAttachShader(state->program, state->fshader);
@@ -335,21 +335,21 @@ static void init_shaders(CUBE_STATE_T *state)
         state->uRotationMatrix   = glGetUniformLocation(state->program, "uRotationMatrix");
 
         // particle
-        state->program2 = glCreateProgram();
-        glAttachShader(state->program2, state->mvshader);
-        glAttachShader(state->program2, state->mshader);
-        glLinkProgram(state->program2);
+        state->program_particle = glCreateProgram();
+        glAttachShader(state->program_particle, state->mvshader);
+        glAttachShader(state->program_particle, state->mshader);
+        glLinkProgram(state->program_particle);
         check();
 
         if (state->verbose)
-            showprogramlog(state->program2);
+            showprogramlog(state->program_particle);
             
-        state->aTheta            = glGetAttribLocation(state->program2, "aTheta");
-        state->uProjectionMatrix = glGetUniformLocation(state->program2, "uProjectionMatrix");
-        state->uK                = glGetUniformLocation(state->program2, "uK");
-	state->aShade            = glGetAttribLocation(state->program2, "aShade");
-        state->uColor            = glGetUniformLocation(state->program2, "uColor");
-	state->uTime             = glGetUniformLocation(state->program2, "uTime");
+        state->aTheta            = glGetAttribLocation(state->program_particle, "aTheta");
+        state->uProjectionMatrix = glGetUniformLocation(state->program_particle, "uProjectionMatrix");
+        state->uK                = glGetUniformLocation(state->program_particle, "uK");
+	state->aShade            = glGetAttribLocation(state->program_particle, "aShade");
+        state->uColor            = glGetUniformLocation(state->program_particle, "uColor");
+	state->uTime             = glGetUniformLocation(state->program_particle, "uTime");
         check();
            
         glGenBuffers(1, &state->buf);
@@ -442,7 +442,7 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 
         glBindBuffer(GL_ARRAY_BUFFER, state->particleBuffer);
         
-        glUseProgram ( state->program2 );
+        glUseProgram ( state->program_particle );
         check();
         // uniforms
 	const GLfloat projectionMatrix[] = {
@@ -626,7 +626,7 @@ state->verbose = 1;
         state->_timeDirection = -1;
     else if(state->_timeCurrent < 0.0f)
         state->_timeDirection = 1;
- 
+
     state->_timeCurrent += state->_timeDirection * (1.0f/30.0f);
    }
    return 0;
