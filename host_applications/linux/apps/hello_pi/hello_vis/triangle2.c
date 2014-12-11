@@ -78,7 +78,7 @@ typedef struct
    GLuint buf;
    GLuint particleBuffer;
 // render attribs
-   GLuint unif_color, attr_vertex, unif_scale, unif_offset, unif_tex, unif_centre, uRotationMatrix; 
+   GLuint attr_vertex, unif_tex, uRotationMatrix; 
 // particle attribs
    GLuint aTheta, uProjectionMatrix, uK, aShade, uColor, uTime;
 
@@ -271,10 +271,6 @@ static void init_shaders(CUBE_STATE_T *state)
       
    // Render
    const GLchar *render_fshader_source =
-	"uniform vec4 color;"
-	"uniform vec2 scale;"
-	"uniform vec2 centre;"
-	"uniform vec2 offset;"
 	"varying vec2 tcoord;"
 	"uniform sampler2D tex;"
 	"void main(void) {"
@@ -327,11 +323,7 @@ static void init_shaders(CUBE_STATE_T *state)
             showprogramlog(state->program);
             
         state->attr_vertex = glGetAttribLocation(state->program, "vertex");
-        state->unif_color  = glGetUniformLocation(state->program, "color");
-        state->unif_scale  = glGetUniformLocation(state->program, "scale");
-        state->unif_offset = glGetUniformLocation(state->program, "offset");
         state->unif_tex    = glGetUniformLocation(state->program, "tex");       
-        state->unif_centre = glGetUniformLocation(state->program, "centre");
         state->uRotationMatrix   = glGetUniformLocation(state->program, "uRotationMatrix");
 
         // particle
@@ -413,10 +405,6 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         check();
         glBindTexture(GL_TEXTURE_2D,state->tex);
         check();
-        glUniform4f(state->unif_color, 0.5, 0.5, 0.8, 1.0);
-        glUniform2f(state->unif_scale, scale, scale);
-        glUniform2f(state->unif_offset, x, y);
-        glUniform2f(state->unif_centre, cx, cy);
         glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
 	float alpha = 1.0f * M_PI /180.0f;
         float scaling = 0.5f;
@@ -503,10 +491,6 @@ static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat 
         check();
         glBindTexture(GL_TEXTURE_2D,state->tex);
         check();
-        glUniform4f(state->unif_color, 0.5, 0.5, 0.8, 1.0);
-        glUniform2f(state->unif_scale, scale, scale);
-        glUniform2f(state->unif_offset, x, y);
-        glUniform2f(state->unif_centre, cx, cy);
         glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
 
 	const GLfloat rotationMatrix[] = {
