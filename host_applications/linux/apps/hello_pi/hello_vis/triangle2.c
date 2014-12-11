@@ -42,8 +42,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "EGL/egl.h"
 #include "EGL/eglext.h"
 
-#define NUM_PARTICLES 10000
- 
+#define NUM_PARTICLES 360
+#define PARTICLE_WIDTH  16
+#define PARTICLE_HEIGHT 16
+#define min(a,b) ((a)<(b)?(a):(b)) 
+#define max(a,b) ((a)<(b)?(b):(a)) 
+
 typedef struct Particle
 {
     GLfloat theta;
@@ -75,17 +79,19 @@ typedef struct
    GLuint program_particle;
    GLuint tex_fb;
    GLuint tex;
+   GLuint tex_particle;
    GLuint buf;
    GLuint particleBuffer;
 // render attribs
-   GLuint attr_vertex, unif_tex, uRotationMatrix; 
+   GLuint attr_vertex, unif_tex, uRotationMatrix;
 // particle attribs
-   GLuint aTheta, uProjectionMatrix, uK, aShade, uColor, uTime;
+   GLuint aTheta, uProjectionMatrix, uK, aShade, uColor, uTime, uTexture;
 
    Emitter emitter;
     float   _timeCurrent;
     float   _timeMax;
     int     _timeDirection;
+  void *tex_particle_data;
 } CUBE_STATE_T;
 
 static CUBE_STATE_T _state, *state=&_state;
@@ -213,6 +219,27 @@ static void init_ogl(CUBE_STATE_T *state)
    check();
 }
 
+static void *create_particle_tex(int width, int height)
+{
+  int i, j;
+  unsigned char *q = malloc(width * height * 4);
+  if (!q)
+    return NULL;
+  unsigned char *p = q;
+  for (j=0; j<height; j++) {
+    for (i=0; i<width; i++) {
+      float x = ((float)i + 0.5f) / (float)width  - 0.5f;
+      float y = ((float)j + 0.5f) / (float)height - 0.5f;
+      float d = 1.0f-2.0f*sqrtf(x*x + y*y);
+      unsigned v = 255.0f * max(min(d, 1.0f), 0.0f);
+      *p++ = 255;
+      *p++ = 255;
+      *p++ = 255;
+      *p++ = v;
+    }
+  }
+  return q;
+}
 
 static void init_shaders(CUBE_STATE_T *state)
 {
@@ -248,13 +275,15 @@ static void init_shaders(CUBE_STATE_T *state)
 	"varying highp vec3 vShade;"
 	"" 
 	//" Uniforms"
+	"uniform sampler2D uTexture;"
 	"uniform highp vec3 uColor;"
 	""
 	"void main(void)"
 	"{"
+	"    highp vec4 texture = texture2D(uTexture, gl_PointCoord);"
 	"    highp vec4 color = vec4((uColor+vShade), 1.0);"
 	"    color.rgb = clamp(color.rgb, vec3(0.0), vec3(1.0));"
-	"    gl_FragColor = color;"
+	"    gl_FragColor = texture * color;"
 	"}";
 
    const GLchar *render_vshader_source =
@@ -342,6 +371,7 @@ static void init_shaders(CUBE_STATE_T *state)
 	state->aShade            = glGetAttribLocation(state->program_particle, "aShade");
         state->uColor            = glGetUniformLocation(state->program_particle, "uColor");
 	state->uTime             = glGetUniformLocation(state->program_particle, "uTime");
+	state->uTexture          = glGetUniformLocation(state->program_particle, "uTexture");
         check();
            
         glGenBuffers(1, &state->buf);
@@ -350,12 +380,23 @@ static void init_shaders(CUBE_STATE_T *state)
         check();
 
         // Prepare a texture image
+        glGenTextures(1, &state->tex_particle);
+        check();
+        glBindTexture(GL_TEXTURE_2D, state->tex_particle);
+        check();
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); 
+	state->tex_particle_data = create_particle_tex(PARTICLE_WIDTH, PARTICLE_HEIGHT);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, PARTICLE_WIDTH, PARTICLE_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, state->tex_particle_data);
+        check();
+
+
+        // Prepare a texture image
         glGenTextures(1, &state->tex);
         check();
-        glBindTexture(GL_TEXTURE_2D,state->tex);
+        glBindTexture(GL_TEXTURE_2D, state->tex);
         check();
         // glActiveTexture(0)
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,state->screen_width,state->screen_height,0,GL_RGB,GL_UNSIGNED_SHORT_5_6_5,0);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, state->screen_width, state->screen_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
         check();
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -407,7 +448,7 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         check();
         glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
 	float alpha = 1.0f * M_PI /180.0f;
-        float scaling = 0.5f;
+        float scaling = 0.45f;
         const GLfloat rotationMatrix[] = {
 		    scaling*cosf(alpha), -scaling*sinf(alpha), 0.0f, 0.0f,
 		    scaling*sinf(alpha),  scaling*cosf(alpha), 0.0f, 0.0f,
@@ -427,6 +468,9 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 
+        glBindTexture(GL_TEXTURE_2D, state->tex_particle);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glBindBuffer(GL_ARRAY_BUFFER, state->particleBuffer);
         
@@ -444,6 +488,7 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         glUniform3f(state->uColor, state->emitter.color[0], state->emitter.color[1], state->emitter.color[2]);
 
         glUniform1f(state->uTime, state->_timeCurrent/state->_timeMax);
+        glUniform1i(state->uTexture, 0); // first currently bound texture "GL_TEXTURE0"
         check();
 
 	// Attributes
@@ -465,6 +510,10 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 
 	// Draw particles
 	glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
+
+	glDisable(GL_BLEND);
+        glBindTexture(GL_TEXTURE_2D,0);
+
 	glDisableVertexAttribArray(state->aTheta);
         glDisableVertexAttribArray(state->aShade);
 
@@ -491,7 +540,7 @@ static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat 
         check();
         glBindTexture(GL_TEXTURE_2D,state->tex);
         check();
-        glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
+        glUniform1i(state->unif_tex, 0);  // first currently bound texture "GL_TEXTURE0"
 
 	const GLfloat rotationMatrix[] = {
 		    0.5f, 0.0f, 0.5f, 0.0f,
@@ -588,7 +637,7 @@ state->verbose = 1;
     state->emitter.color[2] = 0.34f;   // Color: B
 
 	// Initialize variables
-	state->_timeCurrent = 0.0f;
+	state->_timeCurrent = 1.0f;
 	state->_timeMax = 3.0f;
 	state->_timeDirection = 1;
 
@@ -611,7 +660,7 @@ state->verbose = 1;
     else if(state->_timeCurrent < 0.0f)
         state->_timeDirection = 1;
 
-    state->_timeCurrent += state->_timeDirection * (1.0f/30.0f);
+    //state->_timeCurrent += state->_timeDirection * (1.0f/30.0f);
    }
    return 0;
 }
