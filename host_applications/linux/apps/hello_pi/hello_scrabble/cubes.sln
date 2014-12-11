@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual Studio 2005
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cubes", "cubes.vcproj", "{60B7B95C-5C78-406C-A8AB-7472DB82D84F}"
+	ProjectSection(ProjectDependencies) = postProject
+		{68DD89CE-D43F-47B4-80D9-374F49F40341} = {68DD89CE-D43F-47B4-80D9-374F49F40341}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "khclient", "..\..\..\..\middleware\khronos\client\win32\khclient\khclient.vcproj", "{68DD89CE-D43F-47B4-80D9-374F49F40341}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{60B7B95C-5C78-406C-A8AB-7472DB82D84F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{60B7B95C-5C78-406C-A8AB-7472DB82D84F}.Debug|Win32.Build.0 = Debug|Win32
+		{60B7B95C-5C78-406C-A8AB-7472DB82D84F}.Release|Win32.ActiveCfg = Release|Win32
+		{60B7B95C-5C78-406C-A8AB-7472DB82D84F}.Release|Win32.Build.0 = Release|Win32
+		{68DD89CE-D43F-47B4-80D9-374F49F40341}.Debug|Win32.ActiveCfg = Debug|Win32
+		{68DD89CE-D43F-47B4-80D9-374F49F40341}.Debug|Win32.Build.0 = Debug|Win32
+		{68DD89CE-D43F-47B4-80D9-374F49F40341}.Release|Win32.ActiveCfg = Release|Win32
+		{68DD89CE-D43F-47B4-80D9-374F49F40341}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
