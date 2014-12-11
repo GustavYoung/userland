@@ -50,15 +50,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 typedef struct Particle
 {
-    GLfloat theta;
-    GLfloat shade[3];
+    GLfloat pos[2];
+    GLfloat vel[2];
+    GLfloat acc[2];
+    GLfloat shade[4];
 } Particle;
  
 typedef struct Emitter
 {
     Particle particles[NUM_PARTICLES];
     GLfloat  k;
-    GLfloat  color[3];
+    GLfloat  color[4];
 } Emitter;
 
 typedef struct
@@ -85,7 +87,7 @@ typedef struct
 // render attribs
    GLuint attr_vertex, unif_tex, uRotationMatrix;
 // particle attribs
-   GLuint aTheta, uProjectionMatrix, uK, aShade, uColor, uTime, uTexture;
+   GLuint aPos, aVel, aAcc, uProjectionMatrix, uK, aShade, uColor, uTime, uTexture;
 
    Emitter emitter;
     float   _timeCurrent;
@@ -251,38 +253,39 @@ static void init_shaders(CUBE_STATE_T *state)
    };
    const GLchar *particle_vshader_source =
 	//"// Attributes"
-	"attribute float aTheta;"
-        "attribute vec3 aShade;"
+	"attribute vec2 aPos;"
+	"attribute vec2 aVel;"
+	"attribute vec2 aAcc;"
+        "attribute vec4 aShade;"
 	""
 	//"// Uniforms"
 	"uniform mat4 uProjectionMatrix;"
 	"uniform float uK;"
 	"uniform float uTime;"
-	"varying vec3 vShade;"
+	"varying vec4 vShade;"
         ""
 	"void main(void)"
 	"{"
-	"float x = uTime * cos(uK*aTheta)*sin(aTheta);"
-	"float y = uTime * cos(uK*aTheta)*cos(aTheta);"
-	"    gl_Position = uProjectionMatrix * vec4(x, y, 0.0, 1.0);"
+	"    vec2 xy = aPos + aVel * uTime + aAcc * uTime * uTime;"
+	"    gl_Position = uProjectionMatrix * vec4(xy.x, xy.y, 0.0, 1.0);"
 	"    gl_PointSize = 16.0;"
-	"    vShade = aShade;"
+	"    vShade = vec4(aShade.xyz, aShade.a - 1e-2*uTime*uTime);"
 	"}";
  
    //particle
    const GLchar *particle_fshader_source =
 	//" Input from Vertex Shader"
-	"varying highp vec3 vShade;"
+	"varying highp vec4 vShade;"
 	"" 
 	//" Uniforms"
 	"uniform sampler2D uTexture;"
-	"uniform highp vec3 uColor;"
+	"uniform highp vec4 uColor;"
 	""
 	"void main(void)"
 	"{"
 	"    highp vec4 texture = texture2D(uTexture, gl_PointCoord);"
-	"    highp vec4 color = vec4((uColor+vShade), 1.0);"
-	"    color.rgb = clamp(color.rgb, vec3(0.0), vec3(1.0));"
+	"    highp vec4 color = uColor + vShade;"
+	"    color = clamp(color, vec4(0.0), vec4(1.0));"
 	"    gl_FragColor = texture * color;"
 	"}";
 
@@ -365,7 +368,9 @@ static void init_shaders(CUBE_STATE_T *state)
         if (state->verbose)
             showprogramlog(state->program_particle);
             
-        state->aTheta            = glGetAttribLocation(state->program_particle, "aTheta");
+        state->aPos              = glGetAttribLocation(state->program_particle, "aPos");
+        state->aVel              = glGetAttribLocation(state->program_particle, "aVel");
+        state->aAcc              = glGetAttribLocation(state->program_particle, "aAcc");
         state->uProjectionMatrix = glGetUniformLocation(state->program_particle, "uProjectionMatrix");
         state->uK                = glGetUniformLocation(state->program_particle, "uK");
 	state->aShade            = glGetAttribLocation(state->program_particle, "aShade");
@@ -432,7 +437,7 @@ static void init_shaders(CUBE_STATE_T *state)
 }
 
 
-static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat scale, GLfloat x, GLfloat y)
+static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat x, GLfloat y)
 {
         // Draw the particle to a texture
         glBindFramebuffer(GL_FRAMEBUFFER,state->tex_fb);
@@ -447,8 +452,8 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         glBindTexture(GL_TEXTURE_2D,state->tex);
         check();
         glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
-	float alpha = 1.0f * M_PI /180.0f;
-        float scaling = 0.45f;
+	float alpha = 0.0f * M_PI /180.0f;
+        float scaling = 0.5f;
         const GLfloat rotationMatrix[] = {
 		    scaling*cosf(alpha), -scaling*sinf(alpha), 0.0f, 0.0f,
 		    scaling*sinf(alpha),  scaling*cosf(alpha), 0.0f, 0.0f,
@@ -485,24 +490,40 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 	};
         glUniformMatrix4fv(state->uProjectionMatrix, 1, 0, projectionMatrix);
         glUniform1f(state->uK, state->emitter.k);
-        glUniform3f(state->uColor, state->emitter.color[0], state->emitter.color[1], state->emitter.color[2]);
+        glUniform4f(state->uColor, state->emitter.color[0], state->emitter.color[1], state->emitter.color[2], state->emitter.color[3]);
 
-        glUniform1f(state->uTime, state->_timeCurrent/state->_timeMax);
+        glUniform1f(state->uTime, state->_timeCurrent);///state->_timeMax);
         glUniform1i(state->uTexture, 0); // first currently bound texture "GL_TEXTURE0"
         check();
 
 	// Attributes
-	glEnableVertexAttribArray(state->aTheta);
-	glVertexAttribPointer(state->aTheta,                    // Set pointer
-                      1,                                        // One component per particle
+	glEnableVertexAttribArray(state->aPos);
+	glVertexAttribPointer(state->aPos,                    // Set pointer
+                      2,                                        // One component per particle
                       GL_FLOAT,                                 // Data is floating point type
                       GL_FALSE,                                 // No fixed point scaling
                       sizeof(Particle),                         // No gaps in data
-                      (void*)(offsetof(Particle, theta)));      // Start from "theta" offset within bound buffer
+                      (void*)(offsetof(Particle, pos)));      // Start from "theta" offset within bound buffer
+
+	glEnableVertexAttribArray(state->aVel);
+	glVertexAttribPointer(state->aVel,                    // Set pointer
+                      2,                                        // One component per particle
+                      GL_FLOAT,                                 // Data is floating point type
+                      GL_FALSE,                                 // No fixed point scaling
+                      sizeof(Particle),                         // No gaps in data
+                      (void*)(offsetof(Particle, vel)));      // Start from "theta" offset within bound buffer
+
+	glEnableVertexAttribArray(state->aAcc);
+	glVertexAttribPointer(state->aAcc,                    // Set pointer
+                      2,                                        // One component per particle
+                      GL_FLOAT,                                 // Data is floating point type
+                      GL_FALSE,                                 // No fixed point scaling
+                      sizeof(Particle),                         // No gaps in data
+                      (void*)(offsetof(Particle, acc)));      // Start from "theta" offset within bound buffer
 
 	glEnableVertexAttribArray(state->aShade);
 	glVertexAttribPointer(state->aShade,                // Set pointer
-                      3,                                        // Three components per particle
+                      4,                                        // Three components per particle
                       GL_FLOAT,                                 // Data is floating point type
                       GL_FALSE,                                 // No fixed point scaling
                       sizeof(Particle),                         // No gaps in data
@@ -514,7 +535,9 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 	glDisable(GL_BLEND);
         glBindTexture(GL_TEXTURE_2D,0);
 
-	glDisableVertexAttribArray(state->aTheta);
+	glDisableVertexAttribArray(state->aPos);
+	glDisableVertexAttribArray(state->aVel);
+	glDisableVertexAttribArray(state->aAcc);
         glDisableVertexAttribArray(state->aShade);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -525,7 +548,7 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         check();
 }
         
-static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat scale, GLfloat x, GLfloat y)
+static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat x, GLfloat y)
 {
         // Now render to the main frame buffer
         glBindFramebuffer(GL_FRAMEBUFFER,0);
@@ -623,22 +646,36 @@ int main ()
    // Clear application state
    memset( state, 0, sizeof( *state ) );
 state->verbose = 1;
+    float x = randrange( 0.0f, 1.0f) - 0.5f;
+    float y = randrange( 0.0f, 1.0f);
     for(i=0; i<NUM_PARTICLES; i++)
     {
         // Assign each particle its theta value (in radians)
-        state->emitter.particles[i].theta = 2 * M_PI * i / NUM_PARTICLES;
+        state->emitter.particles[i].pos[0] = x;//(float)i / NUM_PARTICLES - 0.5f;
+        state->emitter.particles[i].pos[1] = y;//randrange( 0.0f, 1.0f) - 0.5f;
+
+        float theta = randrange(0.0f, 2.0f*M_PI);
+        float vel   = randrange(0.0f, 0.25f);
+        state->emitter.particles[i].vel[0] = vel*sinf(theta);
+        state->emitter.particles[i].vel[1] = vel*cosf(theta);
+
+        state->emitter.particles[i].acc[0] = 0.0f;
+        state->emitter.particles[i].acc[1] = -0.1f;
+
         state->emitter.particles[i].shade[0] = randrange(-0.25f, 0.25f);
         state->emitter.particles[i].shade[1] = randrange(-0.25f, 0.25f);
         state->emitter.particles[i].shade[2] = randrange(-0.25f, 0.25f);
+        state->emitter.particles[i].shade[3] = randrange( 0.00f, 1.00f);
     }
     state->emitter.k = 4;
     state->emitter.color[0] = 0.76f;   // Color: R
     state->emitter.color[1] = 0.12f;   // Color: G
     state->emitter.color[2] = 0.34f;   // Color: B
+    state->emitter.color[3] = 0.00f;   // Color: A
 
 	// Initialize variables
-	state->_timeCurrent = 1.0f;
-	state->_timeMax = 3.0f;
+	state->_timeCurrent = 0.0f;
+	state->_timeMax = 5.0f;
 	state->_timeDirection = 1;
 
    // Start OGLES
@@ -652,15 +689,15 @@ state->verbose = 1;
       int x, y, b;
       b = get_mouse(state, &x, &y);
       if (b) break;
-      draw_particle_to_texture(state, cx, cy, 0.003, x, y);
-      draw_triangles(state, cx, cy, 0.003, x, y);
+      draw_particle_to_texture(state, cx, cy, x, y);
+      draw_triangles(state, cx, cy, x, y);
 
     if(state->_timeCurrent > state->_timeMax)
         state->_timeDirection = -1;
     else if(state->_timeCurrent < 0.0f)
         state->_timeDirection = 1;
 
-    //state->_timeCurrent += state->_timeDirection * (1.0f/30.0f);
+    state->_timeCurrent += state->_timeDirection * (1.0f/30.0f);
    }
    return 0;
 }
