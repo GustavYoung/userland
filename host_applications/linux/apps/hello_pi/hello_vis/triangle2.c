@@ -78,7 +78,7 @@ typedef struct
    GLuint buf;
    GLuint particleBuffer;
 // julia attribs
-   GLuint unif_color, attr_vertex, unif_scale, unif_offset, unif_tex, unif_centre; 
+   GLuint unif_color, attr_vertex, unif_scale, unif_offset, unif_tex, unif_centre, uRotationMatrix; 
 // particle attribs
    GLuint aTheta, uProjectionMatrix, uK, aShade, uColor, uTime;
 
@@ -260,10 +260,13 @@ static void init_shaders(CUBE_STATE_T *state)
    const GLchar *julia_vshader_source =
               "attribute vec4 vertex;"
               "varying vec2 tcoord;"
+              "uniform mat3 uRotationMatrix;"
               "void main(void) {"
               " vec4 pos = vertex;"
               " gl_Position = pos;"
-              " tcoord = vertex.xy*0.5+0.5;"
+              //" vec3 r = uRotationMatrix * vec3(vertex.x, vertex.y, 1.0);" why doesn't this work?
+              " vec3 r = uRotationMatrix * vec3(vertex.x, vertex.y, 0.0) + 0.5;"
+	      " tcoord = r.xy;"
               "}";
       
    // Julia
@@ -275,35 +278,10 @@ static void init_shaders(CUBE_STATE_T *state)
 "varying vec2 tcoord;"
 "uniform sampler2D tex;"
 "void main(void) {"
-"  float intensity;"
 "  vec4 color2;"
-"  float ar=(gl_FragCoord.x-centre.x)*scale.x;"
-"  float ai=(gl_FragCoord.y-centre.y)*scale.y;"
-"  float cr=(offset.x-centre.x)*scale.x;"
-"  float ci=(offset.y-centre.y)*scale.y;"
-"  float tr,ti;"
-"  float col=0.0;"
-"  float p=0.0;"
-"  int i=0;"
-"  vec2 t2;"
-"  t2.x=tcoord.x+(offset.x-centre.x)*(0.5/centre.y);"
-"  t2.y=tcoord.y+(offset.y-centre.y)*(0.5/centre.x);"
-"  for(int i2=1;i2<16;i2++)"
-"  {"
-"    tr=ar*ar-ai*ai+cr;"
-"    ti=2.0*ar*ai+ci;"
-"    p=tr*tr+ti*ti;"
-"    ar=tr;"
-"    ai=ti;"
-"    if (p>16.0)"
-"    {"
-"      i=i2;"
-"      break;"
-"    }"
-"  }"
-"  color2 = vec4(0,float(i)*0.0625,0,1);"
-"  color2 = color2+texture2D(tex,t2);"
-"  gl_FragColor = color2;"
+"  color2 = texture2D(tex,tcoord);"
+//"  gl_FragColor = max(color2 - 0.05, 0.0);"
+"  gl_FragColor = color2 * 0.9;"
 "}";
 
         state->vshader = glCreateShader(GL_VERTEX_SHADER);
@@ -354,6 +332,7 @@ static void init_shaders(CUBE_STATE_T *state)
         state->unif_offset = glGetUniformLocation(state->program, "offset");
         state->unif_tex    = glGetUniformLocation(state->program, "tex");       
         state->unif_centre = glGetUniformLocation(state->program, "centre");
+        state->uRotationMatrix   = glGetUniformLocation(state->program, "uRotationMatrix");
 
         // particle
         state->program2 = glCreateProgram();
@@ -386,8 +365,8 @@ static void init_shaders(CUBE_STATE_T *state)
         // glActiveTexture(0)
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,state->screen_width,state->screen_height,0,GL_RGB,GL_UNSIGNED_SHORT_5_6_5,0);
         check();
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         check();
         // Prepare a framebuffer for rendering
         glGenFramebuffers(1,&state->tex_fb);
@@ -420,13 +399,46 @@ static void init_shaders(CUBE_STATE_T *state)
 }
 
 
-static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat scale)
+static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat scale, GLfloat x, GLfloat y)
 {
         // Draw the particle to a texture
         glBindFramebuffer(GL_FRAMEBUFFER,state->tex_fb);
         check();
         glClearColor ( 0.0, 0.0, 0.0, 1.0 );
         glClear(GL_COLOR_BUFFER_BIT);
+
+	glBindBuffer(GL_ARRAY_BUFFER, state->buf);
+        check();
+        glUseProgram ( state->program );
+        check();
+        glBindTexture(GL_TEXTURE_2D,state->tex);
+        check();
+        glUniform4f(state->unif_color, 0.5, 0.5, 0.8, 1.0);
+        glUniform2f(state->unif_scale, scale, scale);
+        glUniform2f(state->unif_offset, x, y);
+        glUniform2f(state->unif_centre, cx, cy);
+        glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
+	float alpha = 1.0f * M_PI /180.0f;
+        float scaling = 0.5f;
+        const GLfloat rotationMatrix[] = {
+		    scaling*cosf(alpha), -scaling*sinf(alpha), 0.0f,
+		    scaling*sinf(alpha),  scaling*cosf(alpha), 0.0f,
+		    0.5f,              0.5f,             1.0f,
+	};
+        glUniformMatrix3fv(state->uRotationMatrix, 1, 0, rotationMatrix);
+        check();
+        
+        glVertexAttribPointer(state->attr_vertex, 4, GL_FLOAT, 0, 16, 0);
+        glEnableVertexAttribArray(state->attr_vertex);
+
+        glDrawArrays ( GL_TRIANGLE_FAN, 0, 4 );
+        check();
+	glDisableVertexAttribArray(state->attr_vertex);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+
+
         glBindBuffer(GL_ARRAY_BUFFER, state->particleBuffer);
         
         glUseProgram ( state->program2 );
@@ -436,7 +448,7 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 		    1.0f, 0.0f, 0.0f, 0.0f,
 		    0.0f, cx/cy, 0.0f, 0.0f,
 		    0.0f, 0.0f, 1.0f, 0.0f,
-		    0.0f, 0.0f, 0.0f, 1.0f
+		    (x-cx)/cx, (y-cy)/cy, 0.0f, 1.0f
 	};
         glUniformMatrix4fv(state->uProjectionMatrix, 1, 0, projectionMatrix);
         glUniform1f(state->uK, state->emitter.k);
@@ -495,6 +507,14 @@ static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat 
         glUniform2f(state->unif_offset, x, y);
         glUniform2f(state->unif_centre, cx, cy);
         glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
+
+	const GLfloat rotationMatrix[] = {
+		    0.5f, 0.0f, 0.5f,
+		    0.0f, 0.5f, 0.5f,
+		    0.0f, 0.0f, 1.0f,
+	};
+        glUniformMatrix3fv(state->uRotationMatrix, 1, 0, rotationMatrix);
+
         check();
         
         glVertexAttribPointer(state->attr_vertex, 4, GL_FLOAT, 0, 16, 0);
@@ -597,7 +617,7 @@ state->verbose = 1;
       int x, y, b;
       b = get_mouse(state, &x, &y);
       if (b) break;
-      draw_particle_to_texture(state, cx, cy, 0.003);
+      draw_particle_to_texture(state, cx, cy, 0.003, x, y);
       draw_triangles(state, cx, cy, 0.003, x, y);
 
     if(state->_timeCurrent > state->_timeMax)
