@@ -260,12 +260,12 @@ static void init_shaders(CUBE_STATE_T *state)
    const GLchar *julia_vshader_source =
               "attribute vec4 vertex;"
               "varying vec2 tcoord;"
-              "uniform mat3 uRotationMatrix;"
+              "uniform mat4 uRotationMatrix;"
               "void main(void) {"
               " vec4 pos = vertex;"
               " gl_Position = pos;"
               //" vec3 r = uRotationMatrix * vec3(vertex.x, vertex.y, 1.0);" why doesn't this work?
-              " vec3 r = uRotationMatrix * vec3(vertex.x, vertex.y, 0.0) + 0.5;"
+              " vec4 r = uRotationMatrix * vec4(vertex.x, vertex.y, 0.0, 1.0) + 0.5;"
 	      " tcoord = r.xy;"
               "}";
       
@@ -421,11 +421,12 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 	float alpha = 1.0f * M_PI /180.0f;
         float scaling = 0.5f;
         const GLfloat rotationMatrix[] = {
-		    scaling*cosf(alpha), -scaling*sinf(alpha), 0.0f,
-		    scaling*sinf(alpha),  scaling*cosf(alpha), 0.0f,
-		    0.5f,              0.5f,             1.0f,
+		    scaling*cosf(alpha), -scaling*sinf(alpha), 0.0f, 0.0f,
+		    scaling*sinf(alpha),  scaling*cosf(alpha), 0.0f, 0.0f,
+		    0.5f,                 0.5f,                1.0f, 0.0f,
+                    0.0f,                 0.0f,                0.0f, 1.0f,
 	};
-        glUniformMatrix3fv(state->uRotationMatrix, 1, 0, rotationMatrix);
+        glUniformMatrix4fv(state->uRotationMatrix, 1, 0, rotationMatrix);
         check();
         
         glVertexAttribPointer(state->attr_vertex, 4, GL_FLOAT, 0, 16, 0);
@@ -509,11 +510,12 @@ static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat 
         glUniform1i(state->unif_tex, 0); // I don't really understand this part, perhaps it relates to active texture?
 
 	const GLfloat rotationMatrix[] = {
-		    0.5f, 0.0f, 0.5f,
-		    0.0f, 0.5f, 0.5f,
-		    0.0f, 0.0f, 1.0f,
+		    0.5f, 0.0f, 0.5f, 0.0f,
+		    0.0f, 0.5f, 0.5f, 0.0f,
+		    0.0f, 0.0f, 1.0f, 0.0f,
+		    0.0f, 0.0f, 0.0f, 1.0f,
 	};
-        glUniformMatrix3fv(state->uRotationMatrix, 1, 0, rotationMatrix);
+        glUniformMatrix4fv(state->uRotationMatrix, 1, 0, rotationMatrix);
 
         check();
         
