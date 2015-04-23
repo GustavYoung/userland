@@ -48,9 +48,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define min(a,b) ((a)<(b)?(a):(b)) 
 #define max(a,b) ((a)<(b)?(b):(a)) 
 
+#define NUMCONSTS 9
+#define NUMEMITTERS 30
+
 typedef struct Particle
 {
-    GLfloat pos[2];
+    GLfloat pos[3];
     GLfloat vel[2];
     GLfloat acc[2];
     GLfloat shade[4];
@@ -58,9 +61,9 @@ typedef struct Particle
  
 typedef struct Emitter
 {
-    Particle particles[NUM_PARTICLES];
     GLfloat  k;
     GLfloat  color[4];
+    GLfloat  x, y, z;
 } Emitter;
 
 typedef struct
@@ -89,11 +92,27 @@ typedef struct
 // particle attribs
    GLuint aPos, aVel, aAcc, uProjectionMatrix, uK, aShade, uColor, uTime, uTexture;
 
-   Emitter emitter;
-    float   _timeCurrent;
-    float   _timeMax;
-    int     _timeDirection;
-  void *tex_particle_data;
+   Emitter emitter[NUMEMITTERS];
+   Particle particles[NUM_PARTICLES];
+   float   _timeCurrent;
+   float   _timeMax;
+   int     _timeDirection;
+   void *tex_particle_data;
+
+   float _c[NUMCONSTS];
+   float _ct[NUMCONSTS];
+   float _cv[NUMCONSTS];
+
+  unsigned int numWinds;
+  unsigned int numEmitters;
+  unsigned int numParticles;
+  unsigned int whichParticle;
+  float size;
+  float windSpeed;
+  float emitterSpeed;
+  float particleSpeed;
+  float blur;
+  float eVel;
 } CUBE_STATE_T;
 
 static CUBE_STATE_T _state, *state=&_state;
@@ -253,7 +272,7 @@ static void init_shaders(CUBE_STATE_T *state)
    };
    const GLchar *particle_vshader_source =
 	//"// Attributes"
-	"attribute vec2 aPos;"
+	"attribute vec3 aPos;"
 	"attribute vec2 aVel;"
 	"attribute vec2 aAcc;"
         "attribute vec4 aShade;"
@@ -266,10 +285,12 @@ static void init_shaders(CUBE_STATE_T *state)
         ""
 	"void main(void)"
 	"{"
-	"    vec2 xy = aPos + aVel * uTime + aAcc * uTime * uTime;"
+	"    vec2 xy = vec2(aPos.x, aPos.y) + aVel * uTime + aAcc * uTime * uTime;"
 	"    gl_Position = uProjectionMatrix * vec4(xy.x, xy.y, 0.0, 1.0);"
+	//"    gl_Position = uProjectionMatrix * vec4(aPos.x, aPos.y, aPos.z, 1.0);"
 	"    gl_PointSize = 16.0;"
 	"    vShade = vec4(aShade.xyz, aShade.a - 1e-2*uTime*uTime);"
+        //"    vShade = aShade;"
 	"}";
  
    //particle
@@ -427,11 +448,11 @@ static void init_shaders(CUBE_STATE_T *state)
         // Upload vertex data to a buffer
         glBindBuffer(GL_ARRAY_BUFFER, state->particleBuffer);
 
-	// Create Vertex Buffer Object (VBO)
+        // Create Vertex Buffer Object (VBO)
 	glBufferData(                                       // Fill bound buffer with particles
 		     GL_ARRAY_BUFFER,                       // Buffer target
-		     sizeof(state->emitter.particles),             // Buffer data size
-		     state->emitter.particles,                     // Buffer data pointer
+		     sizeof(state->particles),             // Buffer data size
+		     state->particles,                     // Buffer data pointer
 		     GL_STATIC_DRAW);                       // Usage - Data never changes; used for drawing
         check();
 }
@@ -478,7 +499,16 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glBindBuffer(GL_ARRAY_BUFFER, state->particleBuffer);
-        
+
+#if 1
+	// Create Vertex Buffer Object (VBO)
+	glBufferData(                                       // Fill bound buffer with particles
+		     GL_ARRAY_BUFFER,                       // Buffer target
+		     sizeof(state->particles),             // Buffer data size
+		     state->particles,                     // Buffer data pointer
+		     GL_STATIC_DRAW);                       // Usage - Data never changes; used for drawing
+        check();
+#endif
         glUseProgram ( state->program_particle );
         check();
         // uniforms
@@ -489,8 +519,8 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 		    (x-cx)/cx, (y-cy)/cy, 0.0f, 1.0f
 	};
         glUniformMatrix4fv(state->uProjectionMatrix, 1, 0, projectionMatrix);
-        glUniform1f(state->uK, state->emitter.k);
-        glUniform4f(state->uColor, state->emitter.color[0], state->emitter.color[1], state->emitter.color[2], state->emitter.color[3]);
+        glUniform1f(state->uK, state->emitter[0].k);
+        glUniform4f(state->uColor, state->emitter[0].color[0], state->emitter[0].color[1], state->emitter[0].color[2], state->emitter[0].color[3]);
 
         glUniform1f(state->uTime, state->_timeCurrent);///state->_timeMax);
         glUniform1i(state->uTexture, 0); // first currently bound texture "GL_TEXTURE0"
@@ -499,7 +529,7 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 	// Attributes
 	glEnableVertexAttribArray(state->aPos);
 	glVertexAttribPointer(state->aPos,                    // Set pointer
-                      2,                                        // One component per particle
+                      3,                                        // One component per particle
                       GL_FLOAT,                                 // Data is floating point type
                       GL_FALSE,                                 // No fixed point scaling
                       sizeof(Particle),                         // No gaps in data
@@ -530,7 +560,7 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
                       (void*)(offsetof(Particle, shade)));      // Start from "shade" offset within bound buffer
 
 	// Draw particles
-	glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
+	glDrawArrays(GL_POINTS, 0, state->numParticles);
 
 	glDisable(GL_BLEND);
         glBindTexture(GL_TEXTURE_2D,0);
@@ -584,8 +614,8 @@ static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat 
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-        glFlush();
-        glFinish();
+        //glFlush();
+        //glFinish();
         check();
         
         eglSwapBuffers(state->display, state->surface);
@@ -637,6 +667,12 @@ static float randrange(float min, float max)
    return min + rand() * ((max-min) / RAND_MAX);
 }
 
+uint64_t GetTimeStamp() {
+    struct timeval tv;
+    gettimeofday(&tv,NULL);
+    return tv.tv_sec*(uint64_t)1000000+tv.tv_usec;
+}
+
 int main ()
 {
    int i, terminate = 0;
@@ -646,37 +682,61 @@ int main ()
    // Clear application state
    memset( state, 0, sizeof( *state ) );
 state->verbose = 1;
-    float x = randrange( 0.0f, 1.0f) - 0.5f;
-    float y = randrange( 0.0f, 1.0f);
-    for(i=0; i<NUM_PARTICLES; i++)
+
+  state->numWinds = 1;
+  state->numEmitters = 1;//min(30, NUMEMITTERS);
+  state->numParticles = min(2000, NUM_PARTICLES);
+  state->size = 50.0f;
+  state->windSpeed = 20.0f;
+  state->emitterSpeed = 15.0f;
+  state->particleSpeed = 10.0f;
+  state->blur = 40.0f;
+  state->eVel = state->emitterSpeed * 0.01f;
+
+  for (i = 0; i < NUMCONSTS; ++i) {
+    state->_ct[i] = randrange(0.0f, M_PI * 2.0f);
+    state->_cv[i] = randrange(0.0f, 0.00005f * state->windSpeed * state->windSpeed) + 
+                    0.00001f * state->windSpeed * state->windSpeed;
+  }
+    for(i=0; i<NUMEMITTERS; i++)
     {
+#if 0
+      float x = randrange( 0.0f, 1.0f) - 0.5f;
+      float y = randrange( 0.0f, 1.0f);
+      for(i=0; i<state->numParticles; i++)
+      {
         // Assign each particle its theta value (in radians)
-        state->emitter.particles[i].pos[0] = x;//(float)i / NUM_PARTICLES - 0.5f;
-        state->emitter.particles[i].pos[1] = y;//randrange( 0.0f, 1.0f) - 0.5f;
+        state->emitter[j].particles[i].pos[0] = x;//(float)i / NUM_PARTICLES - 0.5f;
+        state->emitter[j].particles[i].pos[1] = y;//randrange( 0.0f, 1.0f) - 0.5f;
 
         float theta = randrange(0.0f, 2.0f*M_PI);
         float vel   = randrange(0.0f, 0.25f);
-        state->emitter.particles[i].vel[0] = vel*sinf(theta);
-        state->emitter.particles[i].vel[1] = vel*cosf(theta);
+        state->emitter[j].particles[i].vel[0] = vel*sinf(theta);
+        state->emitter[j].particles[i].vel[1] = vel*cosf(theta);
 
-        state->emitter.particles[i].acc[0] = 0.0f;
-        state->emitter.particles[i].acc[1] = -0.1f;
+        state->emitter[j].particles[i].acc[0] = 0.0f;
+        state->emitter[j].particles[i].acc[1] = -0.1f;
 
-        state->emitter.particles[i].shade[0] = randrange(-0.25f, 0.25f);
-        state->emitter.particles[i].shade[1] = randrange(-0.25f, 0.25f);
-        state->emitter.particles[i].shade[2] = randrange(-0.25f, 0.25f);
-        state->emitter.particles[i].shade[3] = randrange( 0.00f, 1.00f);
+        state->emitter[j].particles[i].shade[0] = randrange(-0.25f, 0.25f);
+        state->emitter[j].particles[i].shade[1] = randrange(-0.25f, 0.25f);
+        state->emitter[j].particles[i].shade[2] = randrange(-0.25f, 0.25f);
+        state->emitter[j].particles[i].shade[3] = randrange( 0.00f, 1.00f);
+      }
+#endif
+      state->emitter[i].x = randrange(0.0f, 1.0f) - 0.5f;
+      state->emitter[i].y = randrange(0.0f, 1.0f) - 0.0f,
+      state->emitter[i].z = -15.0f;
+      state->emitter[i].k = 4;
+      state->emitter[i].color[0] = 0.76f;   // Color: R
+      state->emitter[i].color[1] = 0.12f;   // Color: G
+      state->emitter[i].color[2] = 0.34f;   // Color: B
+      state->emitter[i].color[3] = 0.00f;   // Color: A
     }
-    state->emitter.k = 4;
-    state->emitter.color[0] = 0.76f;   // Color: R
-    state->emitter.color[1] = 0.12f;   // Color: G
-    state->emitter.color[2] = 0.34f;   // Color: B
-    state->emitter.color[3] = 0.00f;   // Color: A
 
-	// Initialize variables
-	state->_timeCurrent = 0.0f;
-	state->_timeMax = 5.0f;
-	state->_timeDirection = 1;
+  // Initialize variables
+  state->_timeCurrent = 0.0f;
+  state->_timeMax = 5.0f;
+  state->_timeDirection = 1;
 
    // Start OGLES
    init_ogl(state);
@@ -684,11 +744,52 @@ state->verbose = 1;
    cx = state->screen_width/2;
    cy = state->screen_height/2;
 
+   int frames = 0;
+   uint64_t ts = GetTimeStamp();
    while (!terminate)
    {
       int x, y, b;
       b = get_mouse(state, &x, &y);
       if (b) break;
+
+	// update constants
+	for (i = 0; i < NUMCONSTS; ++i) {
+		state->_ct[i] += state->_cv[i];
+		if (state->_ct[i] > M_PI * 2.0f)
+			state->_ct[i] -= M_PI * 2.0f;
+		state->_c[i] = cosf(state->_ct[i]);
+	}
+
+	// calculate emissions
+	for (i = 0; i < state->numEmitters; ++i) {
+		// emitter moves toward viewer
+		state->emitter[i].z += state->eVel;
+		if (state->emitter[i].z > 15.0f) {	// reset emitter
+		  state->emitter[i].x = randrange(0.0f, 1.0f) - 0.5f;
+		  state->emitter[i].y = randrange(0.0f, 1.0f) - 0.0f,
+		  state->emitter[i].z = -15.0f;
+		}
+                Particle *p = state->particles + state->whichParticle;
+                p->pos[0] = state->emitter[i].x;
+		p->pos[1] = state->emitter[i].y;
+		p->pos[2] = state->emitter[i].z;
+        float theta = randrange(0.0f, 2.0f*M_PI);
+        float vel   = randrange(0.0f, 0.25f);
+        p->vel[0] = vel*sinf(theta);
+        p->vel[1] = vel*cosf(theta);
+
+        p->acc[0] = 0.0f;
+        p->acc[1] = -0.1f;
+
+        p->shade[0] = randrange(-0.25f, 0.25f);
+        p->shade[1] = randrange(-0.25f, 0.25f);
+        p->shade[2] = randrange(-0.25f, 0.25f);
+        p->shade[3] = randrange( 0.00f, 1.00f);
+
+		++state->whichParticle;
+		if (state->whichParticle >= state->numParticles)
+			state->whichParticle = 0;
+	}
       draw_particle_to_texture(state, cx, cy, x, y);
       draw_triangles(state, cx, cy, x, y);
 
@@ -698,6 +799,15 @@ state->verbose = 1;
         state->_timeDirection = 1;
 
     state->_timeCurrent += state->_timeDirection * (1.0f/30.0f);
+
+    frames++;
+    uint64_t ts2 = GetTimeStamp();
+    if (ts2 - ts > 1e6)
+    {
+       printf("%d fps\n", frames);
+       ts += 1e6;
+       frames = 0;
+    }
    }
    return 0;
 }
