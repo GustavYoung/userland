@@ -657,29 +657,6 @@ state->verbose = 1;
   }
     for(i=0; i<NUMEMITTERS; i++)
     {
-#if 0
-      float x = randrange( 0.0f, 1.0f) - 0.5f;
-      float y = randrange( 0.0f, 1.0f);
-      for(i=0; i<state->numParticles; i++)
-      {
-        // Assign each particle its theta value (in radians)
-        state->emitter[j].particles[i].pos[0] = x;//(float)i / NUM_PARTICLES - 0.5f;
-        state->emitter[j].particles[i].pos[1] = y;//randrange( 0.0f, 1.0f) - 0.5f;
-
-        float theta = randrange(0.0f, 2.0f*M_PI);
-        float vel   = randrange(0.0f, 0.25f);
-        state->emitter[j].particles[i].vel[0] = vel*sinf(theta);
-        state->emitter[j].particles[i].vel[1] = vel*cosf(theta);
-
-        state->emitter[j].particles[i].acc[0] = 0.0f;
-        state->emitter[j].particles[i].acc[1] = -0.1f;
-
-        state->emitter[j].particles[i].shade[0] = randrange(-0.25f, 0.25f);
-        state->emitter[j].particles[i].shade[1] = randrange(-0.25f, 0.25f);
-        state->emitter[j].particles[i].shade[2] = randrange(-0.25f, 0.25f);
-        state->emitter[j].particles[i].shade[3] = randrange( 0.00f, 1.00f);
-      }
-#endif
       state->emitter[i].x = randrange(0.0f, 1.0f) - 0.5f;
       state->emitter[i].y = randrange(0.0f, 1.0f) - 0.0f,
       state->emitter[i].z = -15.0f;
