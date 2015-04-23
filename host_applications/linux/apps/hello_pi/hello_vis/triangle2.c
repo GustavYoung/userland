@@ -90,13 +90,10 @@ typedef struct
 // render attribs
    GLuint attr_vertex, unif_tex, uRotationMatrix;
 // particle attribs
-   GLuint aPos, aVel, aAcc, uProjectionMatrix, uK, aShade, uColor, uTime, uTexture;
+   GLuint aPos, aVel, aAcc, uProjectionMatrix, uK, aShade, uColor, uTexture;
 
    Emitter emitter[NUMEMITTERS];
    Particle particles[NUM_PARTICLES];
-   float   _timeCurrent;
-   float   _timeMax;
-   int     _timeDirection;
    void *tex_particle_data;
 
    float _c[NUMCONSTS];
@@ -280,16 +277,15 @@ static void init_shaders(CUBE_STATE_T *state)
 	//"// Uniforms"
 	"uniform mat4 uProjectionMatrix;"
 	"uniform float uK;"
-	"uniform float uTime;"
 	"varying vec4 vShade;"
         ""
 	"void main(void)"
 	"{"
-	"    vec2 xy = vec2(aPos.x, aPos.y) + aVel * uTime + aAcc * uTime * uTime;"
+	"    vec2 xy = vec2(aPos.x, aPos.y) + aVel * 0.01 + aAcc * 0.1;"
 	"    gl_Position = uProjectionMatrix * vec4(xy.x, xy.y, 0.0, 1.0);"
 	//"    gl_Position = uProjectionMatrix * vec4(aPos.x, aPos.y, aPos.z, 1.0);"
 	"    gl_PointSize = 16.0;"
-	"    vShade = vec4(aShade.xyz, aShade.a - 1e-2*uTime*uTime);"
+	"    vShade = vec4(aShade.xyz, aShade.a - 1e-6);"
         //"    vShade = aShade;"
 	"}";
  
@@ -396,7 +392,6 @@ static void init_shaders(CUBE_STATE_T *state)
         state->uK                = glGetUniformLocation(state->program_particle, "uK");
 	state->aShade            = glGetAttribLocation(state->program_particle, "aShade");
         state->uColor            = glGetUniformLocation(state->program_particle, "uColor");
-	state->uTime             = glGetUniformLocation(state->program_particle, "uTime");
 	state->uTexture          = glGetUniformLocation(state->program_particle, "uTexture");
         check();
            
@@ -522,7 +517,6 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         glUniform1f(state->uK, state->emitter[0].k);
         glUniform4f(state->uColor, state->emitter[0].color[0], state->emitter[0].color[1], state->emitter[0].color[2], state->emitter[0].color[3]);
 
-        glUniform1f(state->uTime, state->_timeCurrent);///state->_timeMax);
         glUniform1i(state->uTexture, 0); // first currently bound texture "GL_TEXTURE0"
         check();
 
@@ -733,11 +727,6 @@ state->verbose = 1;
       state->emitter[i].color[3] = 0.00f;   // Color: A
     }
 
-  // Initialize variables
-  state->_timeCurrent = 0.0f;
-  state->_timeMax = 5.0f;
-  state->_timeDirection = 1;
-
    // Start OGLES
    init_ogl(state);
    init_shaders(state);
@@ -793,12 +782,7 @@ state->verbose = 1;
       draw_particle_to_texture(state, cx, cy, x, y);
       draw_triangles(state, cx, cy, x, y);
 
-    if(state->_timeCurrent > state->_timeMax)
-        state->_timeDirection = -1;
-    else if(state->_timeCurrent < 0.0f)
-        state->_timeDirection = 1;
 
-    state->_timeCurrent += state->_timeDirection * (1.0f/30.0f);
 
     frames++;
     uint64_t ts2 = GetTimeStamp();
