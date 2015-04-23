@@ -53,9 +53,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 typedef struct Particle
 {
-    GLfloat pos[3];
-    GLfloat vel[2];
-    GLfloat acc[2];
+    GLfloat pos[4];
     GLfloat shade[4];
 } Particle;
  
@@ -90,7 +88,7 @@ typedef struct
 // render attribs
    GLuint attr_vertex, unif_tex, uRotationMatrix;
 // particle attribs
-   GLuint aPos, aVel, aAcc, uProjectionMatrix, uK, aShade, uColor, uTexture;
+   GLuint aPos, aShade, uProjectionMatrix, uK, uColor, uTexture;
 
    Emitter emitter[NUMEMITTERS];
    Particle particles[NUM_PARTICLES];
@@ -269,9 +267,7 @@ static void init_shaders(CUBE_STATE_T *state)
    };
    const GLchar *particle_vshader_source =
 	//"// Attributes"
-	"attribute vec3 aPos;"
-	"attribute vec2 aVel;"
-	"attribute vec2 aAcc;"
+	"attribute vec4 aPos;"
         "attribute vec4 aShade;"
 	""
 	//"// Uniforms"
@@ -281,12 +277,9 @@ static void init_shaders(CUBE_STATE_T *state)
         ""
 	"void main(void)"
 	"{"
-	"    vec2 xy = vec2(aPos.x, aPos.y) + aVel * 0.01 + aAcc * 0.1;"
-	"    gl_Position = uProjectionMatrix * vec4(xy.x, xy.y, 0.0, 1.0);"
-	//"    gl_Position = uProjectionMatrix * vec4(aPos.x, aPos.y, aPos.z, 1.0);"
+	"    gl_Position = uProjectionMatrix * aPos;"
 	"    gl_PointSize = 16.0;"
-	"    vShade = vec4(aShade.xyz, aShade.a - 1e-6);"
-        //"    vShade = aShade;"
+	"    vShade = aShade;"
 	"}";
  
    //particle
@@ -386,8 +379,6 @@ static void init_shaders(CUBE_STATE_T *state)
             showprogramlog(state->program_particle);
             
         state->aPos              = glGetAttribLocation(state->program_particle, "aPos");
-        state->aVel              = glGetAttribLocation(state->program_particle, "aVel");
-        state->aAcc              = glGetAttribLocation(state->program_particle, "aAcc");
         state->uProjectionMatrix = glGetUniformLocation(state->program_particle, "uProjectionMatrix");
         state->uK                = glGetUniformLocation(state->program_particle, "uK");
 	state->aShade            = glGetAttribLocation(state->program_particle, "aShade");
@@ -514,36 +505,17 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
 		    (x-cx)/cx, (y-cy)/cy, 0.0f, 1.0f
 	};
         glUniformMatrix4fv(state->uProjectionMatrix, 1, 0, projectionMatrix);
-        glUniform1f(state->uK, state->emitter[0].k);
-        glUniform4f(state->uColor, state->emitter[0].color[0], state->emitter[0].color[1], state->emitter[0].color[2], state->emitter[0].color[3]);
-
         glUniform1i(state->uTexture, 0); // first currently bound texture "GL_TEXTURE0"
         check();
 
 	// Attributes
 	glEnableVertexAttribArray(state->aPos);
 	glVertexAttribPointer(state->aPos,                    // Set pointer
-                      3,                                        // One component per particle
+                      4,                                        // One component per particle
                       GL_FLOAT,                                 // Data is floating point type
                       GL_FALSE,                                 // No fixed point scaling
                       sizeof(Particle),                         // No gaps in data
                       (void*)(offsetof(Particle, pos)));      // Start from "theta" offset within bound buffer
-
-	glEnableVertexAttribArray(state->aVel);
-	glVertexAttribPointer(state->aVel,                    // Set pointer
-                      2,                                        // One component per particle
-                      GL_FLOAT,                                 // Data is floating point type
-                      GL_FALSE,                                 // No fixed point scaling
-                      sizeof(Particle),                         // No gaps in data
-                      (void*)(offsetof(Particle, vel)));      // Start from "theta" offset within bound buffer
-
-	glEnableVertexAttribArray(state->aAcc);
-	glVertexAttribPointer(state->aAcc,                    // Set pointer
-                      2,                                        // One component per particle
-                      GL_FLOAT,                                 // Data is floating point type
-                      GL_FALSE,                                 // No fixed point scaling
-                      sizeof(Particle),                         // No gaps in data
-                      (void*)(offsetof(Particle, acc)));      // Start from "theta" offset within bound buffer
 
 	glEnableVertexAttribArray(state->aShade);
 	glVertexAttribPointer(state->aShade,                // Set pointer
@@ -560,8 +532,6 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         glBindTexture(GL_TEXTURE_2D,0);
 
 	glDisableVertexAttribArray(state->aPos);
-	glDisableVertexAttribArray(state->aVel);
-	glDisableVertexAttribArray(state->aAcc);
         glDisableVertexAttribArray(state->aShade);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -762,18 +732,11 @@ state->verbose = 1;
                 p->pos[0] = state->emitter[i].x;
 		p->pos[1] = state->emitter[i].y;
 		p->pos[2] = state->emitter[i].z;
-        float theta = randrange(0.0f, 2.0f*M_PI);
-        float vel   = randrange(0.0f, 0.25f);
-        p->vel[0] = vel*sinf(theta);
-        p->vel[1] = vel*cosf(theta);
-
-        p->acc[0] = 0.0f;
-        p->acc[1] = -0.1f;
-
-        p->shade[0] = randrange(-0.25f, 0.25f);
-        p->shade[1] = randrange(-0.25f, 0.25f);
-        p->shade[2] = randrange(-0.25f, 0.25f);
-        p->shade[3] = randrange( 0.00f, 1.00f);
+		p->pos[3] = 1.0;
+                p->shade[0] = 1.0f;
+                p->shade[1] = 1.0f;
+                p->shade[2] = 1.0f;
+                p->shade[3] = 1.0f;
 
 		++state->whichParticle;
 		if (state->whichParticle >= state->numParticles)
