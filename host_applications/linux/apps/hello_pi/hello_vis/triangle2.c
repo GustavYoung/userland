@@ -42,7 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "EGL/egl.h"
 #include "EGL/eglext.h"
 
-#define NUM_PARTICLES 360
+#define NUM_PARTICLES 2000
 #define PARTICLE_WIDTH  16
 #define PARTICLE_HEIGHT 16
 #define min(a,b) ((a)<(b)?(a):(b)) 
@@ -274,7 +274,7 @@ static void init_shaders(CUBE_STATE_T *state)
         ""
 	"void main(void)"
 	"{"
-	"    gl_Position = uProjectionMatrix * aPos;"
+	"    gl_Position = uProjectionMatrix * vec4(vec3(aPos)/60.0, 1.0);"
 	"    gl_PointSize = 16.0;"
 	"    vShade = aShade;"
 	"}";
@@ -641,7 +641,7 @@ int main ()
 state->verbose = 1;
 
   state->numWinds = 1;
-  state->numEmitters = 1;//min(30, NUMEMITTERS);
+  state->numEmitters = min(30, NUMEMITTERS);
   state->numParticles = min(2000, NUM_PARTICLES);
   state->size = 50.0f;
   state->windSpeed = 20.0f;
@@ -655,11 +655,11 @@ state->verbose = 1;
     state->_cv[i] = randrange(0.0f, 0.00005f * state->windSpeed * state->windSpeed) + 
                     0.00001f * state->windSpeed * state->windSpeed;
   }
-    for(i=0; i<NUMEMITTERS; i++)
+    for (i=0; i<NUMEMITTERS; i++)
     {
-      state->emitter[i].x = randrange(0.0f, 1.0f) - 0.5f;
-      state->emitter[i].y = randrange(0.0f, 1.0f) - 0.0f,
-      state->emitter[i].z = -15.0f;
+      state->emitter[i].x = randrange(0.0f, 60.0f) - 30.0f;
+      state->emitter[i].y = randrange(0.0f, 60.0f) - 30.0f,
+      state->emitter[i].z = randrange(0.0f, 30.0f) - 15.0f;
     }
 
    // Start OGLES
@@ -672,15 +672,15 @@ state->verbose = 1;
    uint64_t ts = GetTimeStamp();
    while (!terminate)
    {
-      int x, y, b;
-      b = get_mouse(state, &x, &y);
-      if (b) break;
+      int x=cx, y=cy, b=0;
+      //b = get_mouse(state, &x, &y);
+      //if (b) break;
 
 	// update constants
 	for (i = 0; i < NUMCONSTS; ++i) {
 		state->_ct[i] += state->_cv[i];
 		if (state->_ct[i] > M_PI * 2.0f)
-			state->_ct[i] -= M_PI * 2.0f;
+		  state->_ct[i] -= M_PI * 2.0f;
 		state->_c[i] = cosf(state->_ct[i]);
 	}
 
@@ -689,8 +689,8 @@ state->verbose = 1;
 		// emitter moves toward viewer
 		state->emitter[i].z += state->eVel;
 		if (state->emitter[i].z > 15.0f) {	// reset emitter
-		  state->emitter[i].x = randrange(0.0f, 1.0f) - 0.5f;
-		  state->emitter[i].y = randrange(0.0f, 1.0f) - 0.0f,
+		  state->emitter[i].x = randrange(0.0f, 60.0f) - 30.0f;
+		  state->emitter[i].y = randrange(0.0f, 60.0f) - 30.0f,
 		  state->emitter[i].z = -15.0f;
 		}
                 Particle *p = state->particles + state->whichParticle;
@@ -698,19 +698,39 @@ state->verbose = 1;
 		p->pos[1] = state->emitter[i].y;
 		p->pos[2] = state->emitter[i].z;
 		p->pos[3] = 1.0;
-                p->shade[0] = 1.0f;
-                p->shade[1] = 1.0f;
-                p->shade[2] = 1.0f;
-                p->shade[3] = 1.0f;
+		p->shade[3] = 1.0f;
 
 		++state->whichParticle;
 		if (state->whichParticle >= state->numParticles)
-			state->whichParticle = 0;
+		  state->whichParticle = 0;
 	}
+
+	// calculate particle positions and colors
+	// first modify constants that affect colors
+	state->_c[6] *= 9.0f / state->particleSpeed;
+	state->_c[7] *= 9.0f / state->particleSpeed;
+	state->_c[8] *= 9.0f / state->particleSpeed;
+	// then update each particle
+	float pVel = state->particleSpeed * 0.01f;
+	for (i = 0; i < state->numParticles; ++i) {
+                Particle *p = state->particles + i;
+		// store old positions
+		float x = p->pos[0];
+		float y = p->pos[1];
+		float z = p->pos[2];
+//if (p->pos[0] + p->pos[1] + p->pos[2] != 0.0f) printf("(%f %f %f), (%f %f %f), (%f %f %f) pvel:%f\n", p->shade[0], p->shade[1], p->shade[2], p->pos[0], p->pos[1], p->pos[2], state->_c[6], state->_c[7], state->_c[8], pVel);
+		// make new positions
+		p->pos[0] = x + (state->_c[0] * y + state->_c[1] * z) * pVel;
+		p->pos[1] = y + (state->_c[2] * z + state->_c[3] * x) * pVel;
+		p->pos[2] = z + (state->_c[4] * x + state->_c[5] * y) * pVel;
+		// calculate colors
+		p->shade[0] = abs((p->pos[0] - x) * state->_c[6]);
+		p->shade[1] = abs((p->pos[1] - y) * state->_c[7]);
+		p->shade[2] = abs((p->pos[2] - z) * state->_c[8]);
+	}
+
       draw_particle_to_texture(state, cx, cy, x, y);
       draw_triangles(state, cx, cy, x, y);
-
-
 
     frames++;
     uint64_t ts2 = GetTimeStamp();
