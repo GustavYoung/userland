@@ -59,8 +59,6 @@ typedef struct Particle
  
 typedef struct Emitter
 {
-    GLfloat  k;
-    GLfloat  color[4];
     GLfloat  x, y, z;
 } Emitter;
 
@@ -88,7 +86,7 @@ typedef struct
 // render attribs
    GLuint attr_vertex, unif_tex, uRotationMatrix;
 // particle attribs
-   GLuint aPos, aShade, uProjectionMatrix, uK, uColor, uTexture;
+   GLuint aPos, aShade, uProjectionMatrix, uTexture;
 
    Emitter emitter[NUMEMITTERS];
    Particle particles[NUM_PARTICLES];
@@ -272,7 +270,6 @@ static void init_shaders(CUBE_STATE_T *state)
 	""
 	//"// Uniforms"
 	"uniform mat4 uProjectionMatrix;"
-	"uniform float uK;"
 	"varying vec4 vShade;"
         ""
 	"void main(void)"
@@ -285,17 +282,15 @@ static void init_shaders(CUBE_STATE_T *state)
    //particle
    const GLchar *particle_fshader_source =
 	//" Input from Vertex Shader"
-	"varying highp vec4 vShade;"
+	"varying vec4 vShade;"
 	"" 
 	//" Uniforms"
 	"uniform sampler2D uTexture;"
-	"uniform highp vec4 uColor;"
 	""
 	"void main(void)"
 	"{"
-	"    highp vec4 texture = texture2D(uTexture, gl_PointCoord);"
-	"    highp vec4 color = uColor + vShade;"
-	"    color = clamp(color, vec4(0.0), vec4(1.0));"
+	"    vec4 texture = texture2D(uTexture, gl_PointCoord);"
+	"    vec4 color = clamp(vShade, vec4(0.0), vec4(1.0));"
 	"    gl_FragColor = texture * color;"
 	"}";
 
@@ -380,9 +375,7 @@ static void init_shaders(CUBE_STATE_T *state)
             
         state->aPos              = glGetAttribLocation(state->program_particle, "aPos");
         state->uProjectionMatrix = glGetUniformLocation(state->program_particle, "uProjectionMatrix");
-        state->uK                = glGetUniformLocation(state->program_particle, "uK");
 	state->aShade            = glGetAttribLocation(state->program_particle, "aShade");
-        state->uColor            = glGetUniformLocation(state->program_particle, "uColor");
 	state->uTexture          = glGetUniformLocation(state->program_particle, "uTexture");
         check();
            
@@ -690,11 +683,6 @@ state->verbose = 1;
       state->emitter[i].x = randrange(0.0f, 1.0f) - 0.5f;
       state->emitter[i].y = randrange(0.0f, 1.0f) - 0.0f,
       state->emitter[i].z = -15.0f;
-      state->emitter[i].k = 4;
-      state->emitter[i].color[0] = 0.76f;   // Color: R
-      state->emitter[i].color[1] = 0.12f;   // Color: G
-      state->emitter[i].color[2] = 0.34f;   // Color: B
-      state->emitter[i].color[3] = 0.00f;   // Color: A
     }
 
    // Start OGLES
