@@ -43,8 +43,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "EGL/eglext.h"
 
 #define NUM_PARTICLES 2000
-#define PARTICLE_WIDTH  64
-#define PARTICLE_HEIGHT 64
+#define PARTICLE_WIDTH  16
+#define PARTICLE_HEIGHT 16
 #define min(a,b) ((a)<(b)?(a):(b)) 
 #define max(a,b) ((a)<(b)?(b):(a)) 
 
