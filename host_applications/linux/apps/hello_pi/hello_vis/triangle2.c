@@ -83,7 +83,7 @@ static void *create_particle_tex(int width, int height)
   return q;
 }
 
-void solarwinds_init_shaders(CUBE_STATE_T *state, int width, int height)
+void plasma_init_shaders(CUBE_STATE_T *state, int width, int height)
 {
    static const GLfloat vertex_data[] = {
         -1.0,-1.0,1.0,1.0,
@@ -275,7 +275,7 @@ void solarwinds_init_shaders(CUBE_STATE_T *state, int width, int height)
         check();
 }
 
-void solarwinds_deinit_shaders(CUBE_STATE_T *state)
+void plasma_deinit_shaders(CUBE_STATE_T *state)
 {
   glDeleteProgram(state->program);
   glDeleteProgram(state->program_particle);
@@ -448,7 +448,7 @@ static float randrange(float min, float max)
    return min + rand() * ((max-min) / RAND_MAX);
 }
 
-void solarwinds_init(CUBE_STATE_T *state)
+void plasma_init(CUBE_STATE_T *state)
 {
   int i;
   state->numWinds = 1;
@@ -474,7 +474,7 @@ void solarwinds_init(CUBE_STATE_T *state)
     }
 }
 
-void solarwinds_update(CUBE_STATE_T *state)
+void plasma_update(CUBE_STATE_T *state)
 {
   int i;
 	// update constants
@@ -531,7 +531,7 @@ void solarwinds_update(CUBE_STATE_T *state)
 	}
 }
 
-void solarwinds_render(CUBE_STATE_T *state, int width, int height)
+void plasma_render(CUBE_STATE_T *state, int width, int height)
 { 
    GLfloat cx, cy;
    cx = width/2;
@@ -677,15 +677,15 @@ int main ()
    // Start OGLES
    init_ogl(eglstate);
 again:
-   solarwinds_init(state);
-   solarwinds_init_shaders(state, eglstate->screen_width, eglstate->screen_height);
+   plasma_init(state);
+   plasma_init_shaders(state, eglstate->screen_width, eglstate->screen_height);
 
    int frames = 0;
    uint64_t ts = GetTimeStamp();
    //while (!terminate)
    {
-      solarwinds_update(state);
-      solarwinds_render(state, eglstate->screen_width, eglstate->screen_height);
+      plasma_update(state);
+      plasma_render(state, eglstate->screen_width, eglstate->screen_height);
         //glFlush();
         //glFinish();
         check();
@@ -702,7 +702,7 @@ again:
        frames = 0;
     }
    }
-   solarwinds_deinit_shaders(state);
+   plasma_deinit_shaders(state);
    goto again;
    return 0;
 }
