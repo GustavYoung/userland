@@ -579,44 +579,6 @@ static void draw_triangles(CUBE_STATE_T *state, GLfloat cx, GLfloat cy, GLfloat 
         check();
 }
 
-static int get_mouse(CUBE_STATE_T *state, int *outx, int *outy)
-{
-    static int fd = -1;
-    const int width=state->screen_width, height=state->screen_height;
-    static int x=800, y=400;
-    const int XSIGN = 1<<4, YSIGN = 1<<5;
-    if (fd<0) {
-       fd = open("/dev/input/mouse0",O_RDONLY|O_NONBLOCK);
-    }
-    if (fd>=0) {
-        struct {char buttons, dx, dy; } m;
-        while (1) {
-           int bytes = read(fd, &m, sizeof m);
-           if (bytes < (int)sizeof m) goto _exit;
-           if (m.buttons&8) {
-              break; // This bit should always be set
-           }
-           read(fd, &m, 1); // Try to sync up again
-        }
-        if (m.buttons&3)
-           return m.buttons&3;
-        x+=m.dx;
-        y+=m.dy;
-        if (m.buttons&XSIGN)
-           x-=256;
-        if (m.buttons&YSIGN)
-           y-=256;
-        if (x<0) x=0;
-        if (y<0) y=0;
-        if (x>width) x=width;
-        if (y>height) y=height;
-   }
-_exit:
-   if (outx) *outx = x;
-   if (outy) *outy = y;
-   return 0;
-}       
- 
 //==============================================================================
 
 static float randrange(float min, float max)
@@ -672,10 +634,6 @@ state->verbose = 1;
    uint64_t ts = GetTimeStamp();
    while (!terminate)
    {
-      int x=cx, y=cy, b=0;
-      //b = get_mouse(state, &x, &y);
-      //if (b) break;
-
 	// update constants
 	for (i = 0; i < NUMCONSTS; ++i) {
 		state->_ct[i] += state->_cv[i];
@@ -729,8 +687,8 @@ state->verbose = 1;
 		p->shade[2] = abs((p->pos[2] - z) * state->_c[8]);
 	}
 
-      draw_particle_to_texture(state, cx, cy, x, y);
-      draw_triangles(state, cx, cy, x, y);
+      draw_particle_to_texture(state, cx, cy, cx, cy);
+      draw_triangles(state, cx, cy, cx, cy);
 
     frames++;
     uint64_t ts2 = GetTimeStamp();
