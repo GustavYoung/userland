@@ -43,8 +43,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "EGL/eglext.h"
 
 #define NUM_PARTICLES 2000
-#define PARTICLE_WIDTH  16
-#define PARTICLE_HEIGHT 16
+#define PARTICLE_WIDTH  64
+#define PARTICLE_HEIGHT 64
 #define min(a,b) ((a)<(b)?(a):(b)) 
 #define max(a,b) ((a)<(b)?(b):(a)) 
 
@@ -274,8 +274,8 @@ static void init_shaders(CUBE_STATE_T *state)
         ""
 	"void main(void)"
 	"{"
-	"    gl_Position = uProjectionMatrix * vec4(vec3(aPos)/60.0, 1.0);"
-	"    gl_PointSize = 16.0;"
+	"    gl_Position = uProjectionMatrix * vec4(aPos.x/60.0, aPos.y/60.0, (16.0-aPos.z)/60.0, 1.0);"
+	"    gl_PointSize = 16.0/gl_Position.w;"
 	"    vShade = aShade;"
 	"}";
  
