@@ -432,7 +432,7 @@ static void init_shaders(CUBE_STATE_T *state)
 		     GL_ARRAY_BUFFER,                       // Buffer target
 		     sizeof(state->particles),             // Buffer data size
 		     state->particles,                     // Buffer data pointer
-		     GL_STATIC_DRAW);                       // Usage - Data never changes; used for drawing
+		     GL_DYNAMIC_DRAW);                       // Usage - Data never changes; used for drawing
         check();
 }
 
@@ -480,12 +480,30 @@ static void draw_particle_to_texture(CUBE_STATE_T *state, GLfloat cx, GLfloat cy
         glBindBuffer(GL_ARRAY_BUFFER, state->particleBuffer);
 
 #if 1
+        int remaining = state->numParticles - state->whichParticle;
+	// Create Vertex Buffer Object (VBO)
+	glBufferSubData(                                       // Fill bound buffer with particles
+		     GL_ARRAY_BUFFER,                       // Buffer target
+		     0,
+                     remaining * sizeof(state->particles[0]),             // Buffer data size
+		     state->particles + state->whichParticle                     // Buffer data pointer
+		     );                       // Usage - Data never changes; used for drawing
+        check();
+	// Create Vertex Buffer Object (VBO)
+	glBufferSubData(                                       // Fill bound buffer with particles
+		     GL_ARRAY_BUFFER,                       // Buffer target
+		     remaining * sizeof(state->particles[0]),
+                     state->whichParticle * sizeof(state->particles[0]),             // Buffer data size
+		     state->particles                     // Buffer data pointer
+		     );                       // Usage - Data never changes; used for drawing
+        check();
+#else
 	// Create Vertex Buffer Object (VBO)
 	glBufferData(                                       // Fill bound buffer with particles
 		     GL_ARRAY_BUFFER,                       // Buffer target
 		     sizeof(state->particles),             // Buffer data size
 		     state->particles,                     // Buffer data pointer
-		     GL_STATIC_DRAW);                       // Usage - Data never changes; used for drawing
+		     GL_DYNAMIC_DRAW);                       // Usage - Data never changes; used for drawing
         check();
 #endif
         glUseProgram ( state->program_particle );
