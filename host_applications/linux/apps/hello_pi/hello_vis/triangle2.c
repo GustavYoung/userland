@@ -40,6 +40,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "triangle2.h"
 
+#define PARTICLE_WIDTH  16
+#define PARTICLE_HEIGHT 16
+
 #define min(a,b) ((a)<(b)?(a):(b)) 
 #define max(a,b) ((a)<(b)?(b):(a)) 
 
@@ -519,7 +522,6 @@ void plasma_update(CUBE_STATE_T *state)
 		float x = p->pos[0];
 		float y = p->pos[1];
 		float z = p->pos[2];
-//if (p->pos[0] + p->pos[1] + p->pos[2] != 0.0f) printf("(%f %f %f), (%f %f %f), (%f %f %f) pvel:%f\n", p->shade[0], p->shade[1], p->shade[2], p->pos[0], p->pos[1], p->pos[2], state->_c[6], state->_c[7], state->_c[8], pVel);
 		// make new positions
 		p->pos[0] = x + (state->_c[0] * y + state->_c[1] * z) * pVel;
 		p->pos[1] = y + (state->_c[2] * z + state->_c[3] * x) * pVel;
@@ -682,7 +684,7 @@ again:
 
    int frames = 0;
    uint64_t ts = GetTimeStamp();
-   //while (!terminate)
+   while (!terminate)
    {
       plasma_update(state);
       plasma_render(state, eglstate->screen_width, eglstate->screen_height);
