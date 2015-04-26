@@ -42,6 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define min(a,b) ((a)<(b)?(a):(b)) 
 #define max(a,b) ((a)<(b)?(b):(a)) 
+#define TO_STRING(...) #__VA_ARGS__
 
 #define check() assert(glGetError() == 0)
 
@@ -61,43 +62,176 @@ static void showprogramlog(GLint shader)
    printf("%d:program:\n%s\n", shader, log);
 }
 
-void plasma_init_shaders(CUBE_STATE_T *state)
+static void *create_particle_tex(int width, int height)
 {
+  int i, j;
+  unsigned char *q = malloc(width * height * 4);
+  if (!q)
+    return NULL;
+  unsigned char *p = q;
+  for (j=0; j<height; j++) {
+    for (i=0; i<width; i++) {
+      float x = ((float)i + 0.5f) / (float)width  - 0.5f;
+      float y = ((float)j + 0.5f) / (float)height - 0.5f;
+      float d = 1.0f-2.0f*sqrtf(x*x + y*y);
+      unsigned v = 255.0f * max(min(d, 1.0f), 0.0f);
+      *p++ = 255;
+      *p++ = 255;
+      *p++ = 255;
+      *p++ = v;
+    }
+  }
+  return q;
+}
+
+static void *create_checkerboard_tex(int width, int height)
+{
+  int i, j;
+  unsigned char *q = malloc(width * height * 4);
+  if (!q)
+    return NULL;
+  unsigned char *p = q;
+  for (j=0; j<height; j++) {
+    for (i=0; i<width; i++) {
+      int b = (i+j) & 1;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+    }
+  }
+  return q;
+}
+
+static void *create_noise_tex(int width, int height)
+{
+  int i, j;
+  unsigned char *q = malloc(width * height * 4);
+  if (!q)
+    return NULL;
+  unsigned char *p = q;
+  for (j=0; j<height; j++) {
+    for (i=0; i<width; i++) {
+      int b = (rand() >> 16) & 1;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+    }
+  }
+  return q;
+}
+
+static void *create_framebuffer_tex(int width, int height)
+{
+  unsigned char *q = malloc(width * height * 4);
+  if (!q)
+    return NULL;
+
+  glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, q);
+  check();
+  return q;
+}
+
+void warp_init_shaders(CUBE_STATE_T *state, int width, int height)
+{
+   state->width = width;
+   state->height = height;
    static const GLfloat vertex_data[] = {
-        -1.0,-1.0,1.0,1.0,
-        1.0,-1.0,1.0,1.0,
+        -1.0,1.0,1.0,1.0,
         1.0,1.0,1.0,1.0,
-        -1.0,1.0,1.0,1.0
+        1.0,-1.0,1.0,1.0,
+        -1.0,-1.0,1.0,1.0,
    };
    const GLchar *plasma_vshader_source =
               "attribute vec4 vertex;"
-              "varying vec2 v_coords;"
+              "varying vec2 vTextureCoord;"
               "void main(void) {"
               " vec4 pos = vertex;"
               " gl_Position = pos;"
-              " v_coords = vertex.xy*0.5+0.5;"
+              " vTextureCoord = vertex.xy*0.5+0.5;"
               "}";
  
    //plasma
-   const GLchar *plasma_fshader_source =
-	"precision mediump float;"
-	"const float PI=3.1415926535897932384626433832795;"
-	"uniform float u_time;"
-	"uniform vec2 u_k;"
-	"varying vec2 v_coords;"
-	"void main() {"
-	"    float v = 0.0;"
-	"    vec2 c = v_coords * u_k - u_k/2.0;"
-	"    v += sin((c.x+u_time));"
-	"    v += sin((c.y+u_time)/2.0);"
-	"    v += sin((c.x+c.y+u_time)/2.0);"
-	"    c += u_k/2.0 * vec2(sin(u_time/3.0), cos(u_time/2.0));"
-	"    v += sin(sqrt(c.x*c.x+c.y*c.y+1.0)+u_time);"
-	"    v = v/2.0;"
-	"    vec3 col = vec3(1, sin(PI*v), cos(PI*v));"
-	"    gl_FragColor = vec4(col*.5 + .5, 1.0);"
-	"}";
+#if 0
+   const GLchar *plasma_fshader_source = TO_STRING(
+varying vec2 vTextureCoord;
+uniform highp float iGlobalTime;
+uniform vec3 iResolution;
+uniform vec2 iMouse;
+uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
 
+const float PI = 3.14159265;
+
+float time = iGlobalTime *0.2;
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
+
+	float color1, color2, color;
+	
+	color1 = (sin(dot(fragCoord.xy,vec2(sin(time*3.0),cos(time*3.0)))*0.02+time*3.0)+1.0)/2.0;
+	
+	vec2 center = vec2(640.0/2.0, 360.0/2.0) + vec2(640.0/2.0*sin(-time*3.0),360.0/2.0*cos(-time*3.0));
+	
+	color2 = (cos(length(fragCoord.xy - center)*0.03)+1.0)/2.0;
+	
+	color = (color1+ color2)/2.0;
+
+	float red	= (cos(PI*color/0.5+time*3.0)+1.0)/2.0;
+	float green	= (sin(PI*color/0.5+time*3.0)+1.0)/2.0;
+	float blue	= (sin(+time*3.0)+1.0)/2.0;
+	
+    fragColor = vec4(red, green, blue, 1.0);
+}
+
+void main () {
+    vec4 fragColor;
+    vec2 fragCoord = vTextureCoord * vec2(iResolution.x, iResolution.y);
+
+    mainImage(fragColor, fragCoord);
+
+    gl_FragColor = fragColor;
+    gl_FragColor.a = 1.0;
+}
+);
+#else
+   const GLchar *plasma_fshader_source = TO_STRING(
+precision lowp float;
+varying vec2 vTextureCoord;
+uniform highp float iGlobalTime;
+uniform vec3 iResolution;
+uniform vec2 iMouse;
+uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+
+float     time=iGlobalTime*0.1;
+float pi = 3.14159265;
+
+void main()
+{
+  float s = sin(time);
+  float c = cos(time);
+  float s2 = 2.0*s*c;
+  float c2 = 1.0-2.0*s*s;
+  float s3 = s2*c + c2*s;
+  float c3 = c2*c - s2*s;
+  float ss = s2*cos(4000.0)+c2*sin(4000.0);
+  float cc = c3*cos(6000.0)-s3*sin(6000.0);
+  vec2 position  = vec2(0.5+0.5*s2,                     0.5+0.5*c3);
+  vec2 position2 = vec2(0.5+0.5*ss, 0.5+0.5*cc);
+  vec2 offset2   = vec2(6.0*sin(time*1.1),              3.0*cos(time*1.1));
+  vec2 oldPos = vTextureCoord.xy - vec2(0.5, 0.5);
+  vec2 newPos = vec2(oldPos.x * c2 - oldPos.y * s2,
+                     oldPos.y * c2 + oldPos.x * s2);
+  newPos = (newPos)*(0.5+0.5*s3)-offset2;
+  vec2 temp = newPos;
+  float beta = sin(temp.y*2.0+time*8.0);
+  newPos.x = temp.x + 0.4*beta;
+  newPos.y = temp.y - 0.4*beta;
+  vec4 final = texture2D(iChannel0, newPos);
+  gl_FragColor = vec4(final.xyz, 1.0);
+}
+);
+#endif
    const GLchar *render_vshader_source =
               "attribute vec4 vertex;"
               "varying vec2 v_coords;"
@@ -154,8 +288,13 @@ void plasma_init_shaders(CUBE_STATE_T *state)
 
         state->attr_vertex     = glGetAttribLocation(state->plasma_program,  "vertex");
         state->uPlasmaMatrix   = glGetUniformLocation(state->plasma_program, "uPlasmaMatrix");
-        state->uK              = glGetUniformLocation(state->plasma_program, "u_k");
-        state->uTime           = glGetUniformLocation(state->plasma_program, "u_time");
+        state->uResolution     = glGetUniformLocation(state->plasma_program, "iResolution");
+        state->uMouse          = glGetUniformLocation(state->plasma_program, "iMouse");
+        state->uTime           = glGetUniformLocation(state->plasma_program, "iGlobalTime");
+        state->uChannel0       = glGetUniformLocation(state->plasma_program, "iChannel0");
+        state->uChannel1       = glGetUniformLocation(state->plasma_program, "iChannel1");
+        state->uChannel2       = glGetUniformLocation(state->plasma_program, "iChannel2");
+        state->uChannel3       = glGetUniformLocation(state->plasma_program, "iChannel3");
         check();
 
         // render
@@ -199,7 +338,7 @@ void plasma_init_shaders(CUBE_STATE_T *state)
         check();
         glBindTexture(GL_TEXTURE_2D, state->plasma_texture);
         check();
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 640, 360, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 960, 540, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
         check();
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -214,6 +353,18 @@ void plasma_init_shaders(CUBE_STATE_T *state)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         check();
 
+        // Prepare a texture image
+        glGenTextures(1, &state->texture);
+        check();
+        glBindTexture(GL_TEXTURE_2D, state->texture);
+        check();
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        state->texture_data = create_framebuffer_tex(state->width, state->height);
+        assert(state->texture_data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, state->width, state->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, state->texture_data);
+        check();
+
         // Upload vertex data to a buffer
         glGenBuffers(1, &state->vertex_buffer);
         glBindBuffer(GL_ARRAY_BUFFER, state->vertex_buffer);
@@ -221,7 +372,7 @@ void plasma_init_shaders(CUBE_STATE_T *state)
         check();
 }
 
-void plasma_deinit_shaders(CUBE_STATE_T *state)
+void warp_deinit_shaders(CUBE_STATE_T *state)
 {
   glDeleteProgram(state->render_program);
   glDeleteProgram(state->plasma_program);
@@ -233,6 +384,11 @@ void plasma_deinit_shaders(CUBE_STATE_T *state)
 
   glDeleteFramebuffers(1, &state->plasma_fb);
   check();
+
+  glDeleteTextures(1, &state->texture);
+  check();
+
+  free(state->texture_data);
 }
 
 static void draw_plasma_to_texture(CUBE_STATE_T *state)
@@ -247,7 +403,14 @@ static void draw_plasma_to_texture(CUBE_STATE_T *state)
         check();
         glUseProgram( state->plasma_program );
         check();
+#if 1
+        glBindTexture(GL_TEXTURE_2D, state->texture);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+#else
         glBindTexture(GL_TEXTURE_2D, state->plasma_texture);
+#endif
         check();
 	float alpha = 0.0f * M_PI /180.0f;
         float scaling = 0.5f;
@@ -259,10 +422,18 @@ static void draw_plasma_to_texture(CUBE_STATE_T *state)
 	};
         glUniformMatrix4fv(state->uPlasmaMatrix, 1, 0, rotationMatrix);
         check();
-        glUniform2f(state->uK, 32.0f, 32.0f);
+        glUniform3f(state->uResolution, state->width, state->height, 1.0f);
+        check();
+        glUniform2f(state->uMouse, 0.0f, 0.0f);
         check();
         glUniform1f(state->uTime, state->time);
         check();        
+        glUniform1i(state->uChannel0, 0); // first currently bound texture "GL_TEXTURE0"
+        glUniform1i(state->uChannel1, 1); // first currently bound texture "GL_TEXTURE1"
+        glUniform1i(state->uChannel2, 2); // first currently bound texture "GL_TEXTURE2"
+        glUniform1i(state->uChannel3, 3); // first currently bound texture "GL_TEXTURE3"
+        check();
+
         glVertexAttribPointer(state->attr_vertex, 4, GL_FLOAT, 0, 16, 0);
         glEnableVertexAttribArray(state->attr_vertex);
 
@@ -311,9 +482,11 @@ static void draw_triangles(CUBE_STATE_T *state)
 
         glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
         check();
-	glDisableVertexAttribArray(state->attr_vertex);
 
+	glDisableVertexAttribArray(state->attr_vertex);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+        check();
 }
 
 //==============================================================================
@@ -323,7 +496,7 @@ static float randrange(float min, float max)
    return min + rand() * ((max-min) / RAND_MAX);
 }
 
-void plasma_init(CUBE_STATE_T *state)
+void warp_init(CUBE_STATE_T *state)
 {
   int i;
   for (i = 0; i < NUMCONSTS; ++i) {
@@ -333,7 +506,13 @@ void plasma_init(CUBE_STATE_T *state)
   }
 }
 
-void plasma_update(CUBE_STATE_T *state)
+uint64_t GetTimeStamp() {
+    struct timeval tv;
+    gettimeofday(&tv,NULL);
+    return tv.tv_sec*(uint64_t)1000000+tv.tv_usec;
+}
+
+void warp_update(CUBE_STATE_T *state)
 {
   int i;
 	// update constants
@@ -343,12 +522,15 @@ void plasma_update(CUBE_STATE_T *state)
 		  state->_ct[i] -= M_PI * 2.0f;
 		state->_c[i] = cosf(state->_ct[i]);
 	}
-  state->time += 0.01f;
-  if (state->time > 12.0f + M_PI)
-    state->time -= 12.0f * M_PI;
+  uint64_t t = GetTimeStamp();
+  if (state->last_time)
+     state->time += (t-state->last_time) * 1e-6;
+  state->last_time = t;
+  //if (state->time > 12.0f + M_PI)
+  //  state->time -= 12.0f * M_PI;
 }
 
-void plasma_render(CUBE_STATE_T *state)
+void warp_render(CUBE_STATE_T *state)
 { 
   draw_plasma_to_texture(state);
   draw_triangles(state);
@@ -365,12 +547,6 @@ typedef struct
    EGLSurface surface;
    EGLContext context;
 } EGL_STATE_T;
-
-uint64_t GetTimeStamp() {
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    return tv.tv_sec*(uint64_t)1000000+tv.tv_usec;
-}
 
 /***********************************************************
  * Name: init_ogl
@@ -484,22 +660,22 @@ int main ()
    EGL_STATE_T _eglstate, *eglstate=&_eglstate;
 
    // Clear application state
-   memset( state, 0, sizeof( *state ) );
    memset( eglstate, 0, sizeof( *eglstate ) );
    state->verbose = 1;
    bcm_host_init();
    // Start OGLES
    init_ogl(eglstate);
 again:
-   plasma_init(state);
-   plasma_init_shaders(state);
+   memset( state, 0, sizeof( *state ) );
+   warp_init(state);
+   warp_init_shaders(state);
 
    int frames = 0;
    uint64_t ts = GetTimeStamp();
    while (!terminate)
    {
-      plasma_update(state);
-      plasma_render(state);
+      warp_update(state);
+      warp_render(state);
         //glFlush();
         //glFinish();
         check();
@@ -511,12 +687,13 @@ again:
     uint64_t ts2 = GetTimeStamp();
     if (ts2 - ts > 1e6)
     {
-       printf("%d fps\n", frames);
+       printf("%d fps (%.3f)\n", frames, state->time);
        ts += 1e6;
        frames = 0;
+break;
     }
    }
-   plasma_deinit_shaders(state);
+   warp_deinit_shaders(state);
    goto again;
    return 0;
 }
