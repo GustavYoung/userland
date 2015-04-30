@@ -103,6 +103,25 @@ static void *create_checkerboard_tex(int width, int height)
   return q;
 }
 
+static void *create_border_tex(int width, int height)
+{
+  int i, j;
+  unsigned char *q = malloc(width * height * 4);
+  if (!q)
+    return NULL;
+  unsigned char *p = q;
+  for (j=0; j<height; j++) {
+    for (i=0; i<width; i++) {
+      int b = i == 16 || i == 20 || i == width-1-16 || j == 16 || j == height-1-16;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+      *p++ = b ? 255:0;
+    }
+  }
+  return q;
+}
+
 static void *create_noise_tex(int width, int height)
 {
   int i, j;
@@ -133,174 +152,58 @@ static void *create_framebuffer_tex(int width, int height)
   return q;
 }
 
-void warp_init_shaders(CUBE_STATE_T *state, int width, int height)
+void screensaver_init_shaders(CUBE_STATE_T *state)
 {
-   state->width = width;
-   state->height = height;
    static const GLfloat vertex_data[] = {
         -1.0,1.0,1.0,1.0,
         1.0,1.0,1.0,1.0,
         1.0,-1.0,1.0,1.0,
         -1.0,-1.0,1.0,1.0,
    };
-   const GLchar *plasma_vshader_source =
-              "attribute vec4 vertex;"
-              "varying vec2 vTextureCoord;"
-              "void main(void) {"
-              " vec4 pos = vertex;"
-              " gl_Position = pos;"
-              " vTextureCoord = vertex.xy*0.5+0.5;"
-              "}";
- 
-   //plasma
-#if 0
-   const GLchar *plasma_fshader_source = TO_STRING(
-varying vec2 vTextureCoord;
-uniform highp float iGlobalTime;
-uniform vec3 iResolution;
-uniform vec2 iMouse;
-uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
-
-const float PI = 3.14159265;
-
-float time = iGlobalTime *0.2;
-
-void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
-
-	float color1, color2, color;
-	
-	color1 = (sin(dot(fragCoord.xy,vec2(sin(time*3.0),cos(time*3.0)))*0.02+time*3.0)+1.0)/2.0;
-	
-	vec2 center = vec2(640.0/2.0, 360.0/2.0) + vec2(640.0/2.0*sin(-time*3.0),360.0/2.0*cos(-time*3.0));
-	
-	color2 = (cos(length(fragCoord.xy - center)*0.03)+1.0)/2.0;
-	
-	color = (color1+ color2)/2.0;
-
-	float red	= (cos(PI*color/0.5+time*3.0)+1.0)/2.0;
-	float green	= (sin(PI*color/0.5+time*3.0)+1.0)/2.0;
-	float blue	= (sin(+time*3.0)+1.0)/2.0;
-	
-    fragColor = vec4(red, green, blue, 1.0);
-}
-
-void main () {
-    vec4 fragColor;
-    vec2 fragCoord = vTextureCoord * vec2(iResolution.x, iResolution.y);
-
-    mainImage(fragColor, fragCoord);
-
-    gl_FragColor = fragColor;
-    gl_FragColor.a = 1.0;
-}
-);
-#else
-   const GLchar *plasma_fshader_source = TO_STRING(
-precision lowp float;
-varying vec2 vTextureCoord;
-uniform highp float iGlobalTime;
-uniform vec3 iResolution;
-uniform vec2 iMouse;
-uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
-
-float     time=iGlobalTime*0.1;
-float pi = 3.14159265;
-
-void main()
-{
-  float s = sin(time);
-  float c = cos(time);
-  float s2 = 2.0*s*c;
-  float c2 = 1.0-2.0*s*s;
-  float s3 = s2*c + c2*s;
-  float c3 = c2*c - s2*s;
-  float ss = s2*cos(4000.0)+c2*sin(4000.0);
-  float cc = c3*cos(6000.0)-s3*sin(6000.0);
-  vec2 position  = vec2(0.5+0.5*s2,                     0.5+0.5*c3);
-  vec2 position2 = vec2(0.5+0.5*ss, 0.5+0.5*cc);
-  vec2 offset2   = vec2(6.0*sin(time*1.1),              3.0*cos(time*1.1));
-  vec2 oldPos = vTextureCoord.xy - vec2(0.5, 0.5);
-  vec2 newPos = vec2(oldPos.x * c2 - oldPos.y * s2,
-                     oldPos.y * c2 + oldPos.x * s2);
-  newPos = (newPos)*(0.5+0.5*s3)-offset2;
-  vec2 temp = newPos;
-  float beta = sin(temp.y*2.0+time*8.0);
-  newPos.x = temp.x + 0.4*beta;
-  newPos.y = temp.y - 0.4*beta;
-  vec4 final = texture2D(iChannel0, newPos);
-  gl_FragColor = vec4(final.xyz, 1.0);
-}
-);
-#endif
-   const GLchar *render_vshader_source =
-              "attribute vec4 vertex;"
-              "varying vec2 v_coords;"
-              "void main(void) {"
-              " vec4 pos = vertex;"
-              " gl_Position = pos;"
-              " v_coords = vertex.xy*0.5+0.5;"
-              "}";
-      
-   // Render
-   const GLchar *render_fshader_source =
-	//" Uniforms"
-	"uniform sampler2D uTexture;"
-        "varying vec2 v_coords;"
-	""
-	"void main(void)"
-	"{"
-        //"gl_FragColor = vec4(v_coords.s, v_coords.t, 0.0, 1.0);"
-	"    vec4 texture = texture2D(uTexture, v_coords);"
-	"    gl_FragColor = texture;"
-	"}";
-
-        check();
-
-        // plasma
-        state->plasma_vshader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(state->plasma_vshader, 1, &plasma_vshader_source, 0);
-        glCompileShader(state->plasma_vshader);
+        // effect
+        state->effect_vshader = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(state->effect_vshader, 1, &state->effect_vshader_source, 0);
+        glCompileShader(state->effect_vshader);
         check();
 
         if (state->verbose)
-            showlog(state->plasma_vshader);
+            showlog(state->effect_vshader);
             
-        state->plasma_fshader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(state->plasma_fshader, 1, &plasma_fshader_source, 0);
-        glCompileShader(state->plasma_fshader);
+        state->effect_fshader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(state->effect_fshader, 1, &state->effect_fshader_source, 0);
+        glCompileShader(state->effect_fshader);
         check();
 
         if (state->verbose)
-            showlog(state->plasma_fshader);
+            showlog(state->effect_fshader);
 
-        state->plasma_program = glCreateProgram();
-        glAttachShader(state->plasma_program, state->plasma_vshader);
-        glAttachShader(state->plasma_program, state->plasma_fshader);
-        glLinkProgram(state->plasma_program);
-        glDetachShader(state->plasma_program, state->plasma_vshader);
-        glDetachShader(state->plasma_program, state->plasma_fshader);
-        glDeleteShader(state->plasma_vshader);
-        glDeleteShader(state->plasma_fshader);
+        state->effect_program = glCreateProgram();
+        glAttachShader(state->effect_program, state->effect_vshader);
+        glAttachShader(state->effect_program, state->effect_fshader);
+        glLinkProgram(state->effect_program);
+        glDetachShader(state->effect_program, state->effect_vshader);
+        glDetachShader(state->effect_program, state->effect_fshader);
+        glDeleteShader(state->effect_vshader);
+        glDeleteShader(state->effect_fshader);
         check();
 
         if (state->verbose)
-            showprogramlog(state->plasma_program);
+            showprogramlog(state->effect_program);
 
-        state->attr_vertex     = glGetAttribLocation(state->plasma_program,  "vertex");
-        state->uPlasmaMatrix   = glGetUniformLocation(state->plasma_program, "uPlasmaMatrix");
-        state->uResolution     = glGetUniformLocation(state->plasma_program, "iResolution");
-        state->uMouse          = glGetUniformLocation(state->plasma_program, "iMouse");
-        state->uTime           = glGetUniformLocation(state->plasma_program, "iGlobalTime");
-        state->uChannel0       = glGetUniformLocation(state->plasma_program, "iChannel0");
-        state->uChannel1       = glGetUniformLocation(state->plasma_program, "iChannel1");
-        state->uChannel2       = glGetUniformLocation(state->plasma_program, "iChannel2");
-        state->uChannel3       = glGetUniformLocation(state->plasma_program, "iChannel3");
+        state->attr_vertex     = glGetAttribLocation(state->effect_program,  "vertex");
+        state->uResolution     = glGetUniformLocation(state->effect_program, "iResolution");
+        state->uMouse          = glGetUniformLocation(state->effect_program, "iMouse");
+        state->uTime           = glGetUniformLocation(state->effect_program, "iGlobalTime");
+        state->uChannel0       = glGetUniformLocation(state->effect_program, "iChannel0");
+        state->uChannel1       = glGetUniformLocation(state->effect_program, "iChannel1");
+        state->uChannel2       = glGetUniformLocation(state->effect_program, "iChannel2");
+        state->uChannel3       = glGetUniformLocation(state->effect_program, "iChannel3");
         check();
 
         // render
         state->render_vshader = glCreateShader(GL_VERTEX_SHADER);
         check();
-        glShaderSource(state->render_vshader, 1, &render_vshader_source, 0);
+        glShaderSource(state->render_vshader, 1, &state->render_vshader_source, 0);
         check();
         glCompileShader(state->render_vshader);
         check();
@@ -309,7 +212,7 @@ void main()
             showlog(state->render_vshader);
             
         state->render_fshader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(state->render_fshader, 1, &render_fshader_source, 0);
+        glShaderSource(state->render_fshader, 1, &state->render_fshader_source, 0);
         glCompileShader(state->render_fshader);
         check();
 
@@ -329,42 +232,46 @@ void main()
         if (state->verbose)
             showprogramlog(state->render_program);
             
-        state->uRenderMatrix = glGetUniformLocation(state->render_program, "uRenderMatrix");
+        state->uRenderMatrix = glGetUniformLocation(state->render_program, "modelViewProjectionMatrix");
 	state->uTexture      = glGetUniformLocation(state->render_program, "uTexture");
         check();
            
+        if (state->fbwidth && state->fbheight)
+        {
+          // Prepare a texture to render to
+          glGenTextures(1, &state->framebuffer_texture);
+          check();
+          glActiveTexture(GL_TEXTURE0);
+          glBindTexture(GL_TEXTURE_2D, state->framebuffer_texture);
+          check();
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, state->fbwidth, state->fbheight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+          check();
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+          check();
+          // Prepare a framebuffer for rendering
+          glGenFramebuffers(1, &state->effect_fb);
+          check();
+          glBindFramebuffer(GL_FRAMEBUFFER, state->effect_fb);
+          check();
+          glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state->framebuffer_texture, 0);
+          check();
+          glBindFramebuffer(GL_FRAMEBUFFER, 0);
+          check();
+        }
         // Prepare a texture image
-        glGenTextures(1, &state->plasma_texture);
-        check();
-        glBindTexture(GL_TEXTURE_2D, state->plasma_texture);
-        check();
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 960, 540, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
-        check();
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        check();
-        // Prepare a framebuffer for rendering
-        glGenFramebuffers(1, &state->plasma_fb);
-        check();
-        glBindFramebuffer(GL_FRAMEBUFFER, state->plasma_fb);
-        check();
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state->plasma_texture, 0);
-        check();
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        check();
-
-        // Prepare a texture image
-        glGenTextures(1, &state->texture);
-        check();
-        glBindTexture(GL_TEXTURE_2D, state->texture);
-        check();
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        state->texture_data = create_framebuffer_tex(state->width, state->height);
-        assert(state->texture_data);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, state->width, state->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, state->texture_data);
-        check();
-
+        if (state->effect_texture_data)
+        {
+          glGenTextures(1, &state->effect_texture);
+          check();
+          glActiveTexture(GL_TEXTURE0);
+          glBindTexture(GL_TEXTURE_2D, state->effect_texture);
+          check();
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, state->texwidth, state->texheight, 0, GL_RGBA, GL_UNSIGNED_BYTE, state->effect_texture_data);
+          check();
+        }
         // Upload vertex data to a buffer
         glGenBuffers(1, &state->vertex_buffer);
         glBindBuffer(GL_ARRAY_BUFFER, state->vertex_buffer);
@@ -372,45 +279,52 @@ void main()
         check();
 }
 
-void warp_deinit_shaders(CUBE_STATE_T *state)
+void screensaver_deinit_shaders(CUBE_STATE_T *state)
 {
   glDeleteProgram(state->render_program);
-  glDeleteProgram(state->plasma_program);
+  glDeleteProgram(state->effect_program);
   check();
 
   glDeleteBuffers(1, &state->vertex_buffer);
-  glDeleteTextures(1, &state->plasma_texture);
-  check();
-
-  glDeleteFramebuffers(1, &state->plasma_fb);
-  check();
-
-  glDeleteTextures(1, &state->texture);
-  check();
-
-  free(state->texture_data);
+  if (state->framebuffer_texture)
+  {
+    glDeleteTextures(1, &state->framebuffer_texture);
+    check();
+  }
+  if (state->effect_fb)
+  {
+    glDeleteFramebuffers(1, &state->effect_fb);
+    check();
+  }
+  if (state->effect_texture)
+  {
+    glDeleteTextures(1, &state->effect_texture);
+    check();
+  }
+  if (state->effect_texture_data)
+    free(state->effect_texture_data);
 }
 
-static void draw_plasma_to_texture(CUBE_STATE_T *state)
+static void draw_effect_to_texture(CUBE_STATE_T *state)
 {
-        // Draw the plasma to a texture
-        glBindFramebuffer(GL_FRAMEBUFFER, state->plasma_fb);
+        // Draw the effect to a texture
+        if (state->effect_fb)
+          glBindFramebuffer(GL_FRAMEBUFFER, state->effect_fb);
+        else
+          glBindFramebuffer(GL_FRAMEBUFFER, 0);
         check();
-        glClearColor( 0.0, 0.0, 0.0, 1.0 );
-        glClear(GL_COLOR_BUFFER_BIT);
 
 	glBindBuffer(GL_ARRAY_BUFFER, state->vertex_buffer);
         check();
-        glUseProgram( state->plasma_program );
+        glUseProgram( state->effect_program );
         check();
-#if 1
-        glBindTexture(GL_TEXTURE_2D, state->texture);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-#else
-        glBindTexture(GL_TEXTURE_2D, state->plasma_texture);
-#endif
+        if (state->effect_texture)
+        {
+          glActiveTexture(GL_TEXTURE0);
+          glBindTexture(GL_TEXTURE_2D, state->effect_texture);
+          glEnable(GL_BLEND);
+          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
         check();
 	float alpha = 0.0f * M_PI /180.0f;
         float scaling = 0.5f;
@@ -420,11 +334,9 @@ static void draw_plasma_to_texture(CUBE_STATE_T *state)
 		    0.5f,                 0.5f,                1.0f, 0.0f,
                     0.0f,                 0.0f,                0.0f, 1.0f,
 	};
-        glUniformMatrix4fv(state->uPlasmaMatrix, 1, 0, rotationMatrix);
-        check();
         glUniform3f(state->uResolution, state->width, state->height, 1.0f);
         check();
-        glUniform2f(state->uMouse, 0.0f, 0.0f);
+        glUniform2f(state->uMouse, state->mousex, state->mousey);
         check();
         glUniform1f(state->uTime, state->time);
         check();        
@@ -441,30 +353,26 @@ static void draw_plasma_to_texture(CUBE_STATE_T *state)
         check();
 	glDisableVertexAttribArray(state->attr_vertex);
 
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
-        check();
-               
-        glFlush();
-        glFinish();
         check();
 }
 
 static void draw_triangles(CUBE_STATE_T *state)
 {
+        // already on framebuffer
+        if (!state->framebuffer_texture)
+          return;
         // Now render to the main frame buffer
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        // Clear the background (not really necessary I suppose)
-        glClearColor( 0.0, 1.0, 1.0, 1.0 );
-        glClear(GL_COLOR_BUFFER_BIT);
         check();
 
         glBindBuffer(GL_ARRAY_BUFFER, state->vertex_buffer);
         check();
         glUseProgram ( state->render_program );
         check();
-        glBindTexture(GL_TEXTURE_2D, state->plasma_texture);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, state->framebuffer_texture);
         check();
         glUniform1i(state->uTexture, 0); // first currently bound texture "GL_TEXTURE0"
         check();
@@ -496,7 +404,7 @@ static float randrange(float min, float max)
    return min + rand() * ((max-min) / RAND_MAX);
 }
 
-void warp_init(CUBE_STATE_T *state)
+void screensaver_init(CUBE_STATE_T *state)
 {
   int i;
   for (i = 0; i < NUMCONSTS; ++i) {
@@ -512,7 +420,7 @@ uint64_t GetTimeStamp() {
     return tv.tv_sec*(uint64_t)1000000+tv.tv_usec;
 }
 
-void warp_update(CUBE_STATE_T *state)
+void screensaver_update(CUBE_STATE_T *state)
 {
   int i;
 	// update constants
@@ -530,10 +438,284 @@ void warp_update(CUBE_STATE_T *state)
   //  state->time -= 12.0f * M_PI;
 }
 
-void warp_render(CUBE_STATE_T *state)
+void screensaver_render(CUBE_STATE_T *state)
 { 
-  draw_plasma_to_texture(state);
+  draw_effect_to_texture(state);
   draw_triangles(state);
+}
+
+void setup_screensaver_default(CUBE_STATE_T *state)
+{
+  state->effect_vshader_source = TO_STRING(
+         attribute vec4 vertex;
+         varying vec2 vTextureCoord;
+         void main(void)
+         {
+            gl_Position = vertex;
+            vTextureCoord = vertex.xy*0.5+0.5;
+         }
+  );
+  state->effect_fshader_source = TO_STRING(
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+  );
+  state->render_vshader_source = TO_STRING(
+         attribute vec4 vertex;
+         varying vec2 vTextureCoord;
+         uniform mat4 modelViewProjectionMatrix;
+         void main(void)
+         {
+             vec4 r = modelViewProjectionMatrix * vertex;
+             gl_Position = r;
+             vTextureCoord = r.xy*0.5+0.5;
+         }
+  );
+  state->render_fshader_source = TO_STRING(
+         uniform sampler2D uTexture;
+         varying vec2 vTextureCoord;
+         void main(void)
+         {
+            vec4 texture = texture2D(uTexture, vTextureCoord);
+            gl_FragColor = texture;
+         }
+  );
+}
+
+void setup_screensaver_plasma(CUBE_STATE_T *state)
+{
+  state->fbwidth = 960;
+  state->fbheight = 540;
+  state->effect_fshader_source = TO_STRING(
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+
+	float     u_time=iGlobalTime*0.2;
+        vec2      u_k = vec2(32.0, 32.0);
+        precision mediump float;
+        const float PI=3.1415926535897932384626433832795;
+        void main()
+        {
+           float v = 0.0;
+           vec2 c = vTextureCoord * u_k - u_k/2.0;
+           v += sin((c.x+u_time));
+           v += sin((c.y+u_time)/2.0);
+           v += sin((c.x+c.y+u_time)/2.0);
+           c += u_k/2.0 * vec2(sin(u_time/3.0), cos(u_time/2.0));
+           v += sin(sqrt(c.x*c.x+c.y*c.y+1.0)+u_time);
+           v = v/2.0;
+           vec3 col = vec3(1.0, sin(PI*v), cos(PI*v));
+           gl_FragColor = vec4(col*0.5 + 0.5, 1.0);
+       }
+  );
+}
+
+
+void setup_screensaver_plasma2(CUBE_STATE_T *state)
+{
+  state->fbwidth = 960;
+  state->fbheight = 540;
+  state->effect_fshader_source = TO_STRING(
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+
+	float     u_time=iGlobalTime*0.2;
+        vec2      u_k = vec2(32.0, 32.0);
+        precision mediump float;
+        const float PI=3.1415926535897932384626433832795;
+
+		void mainImage( out vec4 fragColor, in vec2 fragCoord )
+		{
+			vec2 p = -1.0 + 2.0 * fragCoord.xy / iResolution.xy;
+	
+		// main code, *original shader by: 'Plasma' by Viktor Korsun (2011)
+		float x = p.x;
+		float y = p.y;
+		float mov0 = x+y+cos(sin(iGlobalTime)*2.0)*100.+sin(x/100.)*1000.;
+		float mov1 = y / 0.9 +  iGlobalTime;
+		float mov2 = x / 0.2;
+		float c1 = abs(sin(mov1+iGlobalTime)/2.+mov2/2.-mov1-mov2+iGlobalTime);
+		float c2 = abs(sin(c1+sin(mov0/1000.+iGlobalTime)+sin(y/40.+iGlobalTime)+sin((x+y)/100.)*3.));
+		float c3 = abs(sin(c2+cos(mov1+mov2+c2)+cos(mov2)+sin(x/1000.)));
+		fragColor = vec4(c1,c2,c3,1.0);
+	
+		}
+
+	void main () {
+	    vec4 fragColor;
+	    vec2 fragCoord = vTextureCoord * vec2(iResolution.x, iResolution.y);
+	    mainImage(fragColor, fragCoord);
+	    gl_FragColor = fragColor;
+	    gl_FragColor.a = 1.0;
+	}
+  );
+}
+
+
+void setup_screensaver_border(CUBE_STATE_T *state)
+{
+  state->texwidth = state->texheight = 256;
+  state->fbwidth = state->fbheight = 256;
+  state->effect_texture_data = create_border_tex(state->texwidth, state->texheight);
+  state->effect_fshader_source = TO_STRING(
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+
+         void main(void)
+         {
+            vec4 texture = texture2D(iChannel0, vTextureCoord);
+            gl_FragColor = texture;
+         }
+  );
+}
+
+
+void setup_screensaver_interstellar(CUBE_STATE_T *state)
+{
+  state->texwidth = state->texheight = 256;
+  state->effect_texture_data = create_noise_tex(state->texwidth, state->texheight);
+  state->fbwidth = 256;
+  state->fbheight = 256;
+
+  state->effect_fshader_source = TO_STRING(
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+
+	const float tau = 6.28318530717958647692;
+	vec4 Noise( in ivec2 x )
+	{
+		return texture2D( iChannel0, (vec2(x)+0.5)/256.0, -100.0 );
+	}
+
+	vec4 Rand( in int x )
+	{
+		vec2 uv;
+		uv.x = (float(x)+0.5)/256.0;
+		uv.y = (floor(uv.x)+0.5)/256.0;
+		return texture2D( iChannel0, uv, -100.0 );
+	}
+
+	void main()
+	{
+		vec3 ray;
+		ray.xy = vTextureCoord - vec2(0.25);
+		ray.z = 1.0;
+
+		float offset = iGlobalTime*.5;	
+		float speed2 = (cos(offset)+1.0)*2.0;
+		float speed = speed2+.1;
+		offset += sin(offset)*.96;
+		offset *= 2.0;
+
+		vec3 col = vec3(0);	
+		vec3 stp = ray/max(abs(ray.x),abs(ray.y));
+		vec3 pos = 2.0*stp+.5;
+		for ( int i=0; i < 14; i++ )
+		{
+			float z = Noise(ivec2(pos.xy)).x;
+			z = fract(z-offset);
+			float d = 50.0*z-pos.z;
+			float w = pow(max(0.0,1.0-8.0*length(fract(pos.xy)-.5)),2.0);
+			vec3 c = max(vec3(0),vec3(1.0-abs(d+speed2*.5)/speed,1.0-abs(d)/speed,1.0-abs(d-speed2*.5)/speed));
+			col += 1.5*(1.0-z)*c*w;
+			pos += stp;
+		}
+		gl_FragColor = vec4(col,1.0);
+	}
+  );
+}
+
+void setup_screensaver_noise(CUBE_STATE_T *state)
+{
+   state->effect_fshader_source = TO_STRING(
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+
+	float     time=iGlobalTime*0.1;
+	float pi = 3.14159265;
+
+	float rand(vec2 co)
+	{
+	  return fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453);
+	}
+
+	void main()
+	{
+	  float r = rand(vec2(1.0*iGlobalTime+vTextureCoord.x, 3.0*iGlobalTime+vTextureCoord.y));
+	  float g = rand(vec2(2.0*iGlobalTime+vTextureCoord.x, 2.0*iGlobalTime+vTextureCoord.y));
+	  float b = rand(vec2(3.0*iGlobalTime+vTextureCoord.x, 1.0*iGlobalTime+vTextureCoord.y));
+	  gl_FragColor = vec4(r, g, b, 1.0);
+	}
+  );
+}
+
+void setup_screensaver_warp(CUBE_STATE_T *state)
+{
+  state->texwidth = state->width;
+  state->texheight = state->height;
+  state->fbwidth = 960;
+  state->fbheight = 540;
+  state->effect_texture_data = create_framebuffer_tex(state->texwidth, state->texheight);
+
+  state->effect_fshader_source = TO_STRING(
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+
+	float     time=iGlobalTime*0.1;
+	float pi = 3.14159265;
+
+	void main()
+	{
+	  float s = sin(time);
+	  float c = cos(time);
+	  float s2 = 2.0*s*c;
+	  float c2 = 1.0-2.0*s*s;
+	  float s3 = s2*c + c2*s;
+	  float c3 = c2*c - s2*s;
+	  float ss = s2*cos(4000.0)+c2*sin(4000.0);
+	  float cc = c3*cos(6000.0)-s3*sin(6000.0);
+	  vec2 position  = vec2(0.5+0.5*s2,                     0.5+0.5*c3);
+	  vec2 position2 = vec2(0.5+0.5*ss, 0.5+0.5*cc);
+	  vec2 offset2   = vec2(6.0*sin(time*1.1),              3.0*cos(time*1.1));
+	  vec2 oldPos = vTextureCoord.xy - vec2(0.5, 0.5);
+	  vec2 newPos = vec2(oldPos.x * c2 - oldPos.y * s2,
+		             oldPos.y * c2 + oldPos.x * s2);
+	  newPos = (newPos)*(0.8+0.2*s3)-offset2;
+	  vec2 temp = newPos;
+	  float beta = sin(temp.y*2.0+time*8.0);
+	  newPos.x = temp.x + 0.4*beta;
+	  newPos.y = temp.y - 0.4*beta;
+	  vec4 final = texture2D(iChannel0, newPos);
+	  gl_FragColor = vec4(final.rgb, 1.0);
+	}
+  );
 }
 
 #ifdef STANDALONE
@@ -661,39 +843,39 @@ int main ()
 
    // Clear application state
    memset( eglstate, 0, sizeof( *eglstate ) );
-   state->verbose = 1;
    bcm_host_init();
    // Start OGLES
    init_ogl(eglstate);
 again:
    memset( state, 0, sizeof( *state ) );
-   warp_init(state);
-   warp_init_shaders(state);
+   state->verbose = 1;
+   state->width = eglstate->screen_width;
+   state->height = eglstate->screen_height;
+   setup_screensaver_default(state);
+   setup_screensaver_border(state);
+   screensaver_init(state);
+   screensaver_init_shaders(state);
 
    int frames = 0;
    uint64_t ts = GetTimeStamp();
    while (!terminate)
    {
-      warp_update(state);
-      warp_render(state);
-        //glFlush();
-        //glFinish();
-        check();
-        
-        eglSwapBuffers(eglstate->display, eglstate->surface);
-        check();
+      screensaver_update(state);
+      screensaver_render(state);
+      eglSwapBuffers(eglstate->display, eglstate->surface);
+      check();
 
-    frames++;
-    uint64_t ts2 = GetTimeStamp();
-    if (ts2 - ts > 1e6)
-    {
-       printf("%d fps (%.3f)\n", frames, state->time);
-       ts += 1e6;
-       frames = 0;
-break;
-    }
+      frames++;
+      uint64_t ts2 = GetTimeStamp();
+      if (ts2 - ts > 1e6)
+      {
+         printf("%d fps (%.3f)\n", frames, state->time);
+         ts += 1e6;
+         frames = 0;
+         //break;
+      }
    }
-   warp_deinit_shaders(state);
+   screensaver_deinit_shaders(state);
    goto again;
    return 0;
 }
