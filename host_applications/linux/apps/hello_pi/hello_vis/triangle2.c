@@ -131,11 +131,10 @@ static void *create_noise_tex(int width, int height)
   unsigned char *p = q;
   for (j=0; j<height; j++) {
     for (i=0; i<width; i++) {
-      int b = (rand() >> 16) & 1;
-      *p++ = b ? 255:0;
-      *p++ = b ? 255:0;
-      *p++ = b ? 255:0;
-      *p++ = b ? 255:0;
+      *p++ = (rand() >> 16) & 0xff;
+      *p++ = (rand() >> 16) & 0xff;
+      *p++ = (rand() >> 16) & 0xff;
+      *p++ = 255;
     }
   }
   return q;
@@ -190,14 +189,12 @@ void screensaver_init_shaders(CUBE_STATE_T *state)
         if (state->verbose)
             showprogramlog(state->effect_program);
 
-        state->attr_vertex     = glGetAttribLocation(state->effect_program,  "vertex");
-        state->uResolution     = glGetUniformLocation(state->effect_program, "iResolution");
-        state->uMouse          = glGetUniformLocation(state->effect_program, "iMouse");
-        state->uTime           = glGetUniformLocation(state->effect_program, "iGlobalTime");
-        state->uChannel0       = glGetUniformLocation(state->effect_program, "iChannel0");
-        state->uChannel1       = glGetUniformLocation(state->effect_program, "iChannel1");
-        state->uChannel2       = glGetUniformLocation(state->effect_program, "iChannel2");
-        state->uChannel3       = glGetUniformLocation(state->effect_program, "iChannel3");
+        state->attr_vertex   = glGetAttribLocation(state->effect_program,  "vertex");
+        state->uResolution   = glGetUniformLocation(state->effect_program, "iResolution");
+        state->uMouse        = glGetUniformLocation(state->effect_program, "iMouse");
+        state->uTime         = glGetUniformLocation(state->effect_program, "iGlobalTime");
+        state->uChannel0     = glGetUniformLocation(state->effect_program, "iChannel0");
+        state->uScale        = glGetUniformLocation(state->effect_program, "uScale");
         check();
 
         // render
@@ -231,8 +228,7 @@ void screensaver_init_shaders(CUBE_STATE_T *state)
 
         if (state->verbose)
             showprogramlog(state->render_program);
-            
-        state->uRenderMatrix = glGetUniformLocation(state->render_program, "modelViewProjectionMatrix");
+
 	state->uTexture      = glGetUniformLocation(state->render_program, "uTexture");
         check();
            
@@ -322,28 +318,18 @@ static void draw_effect_to_texture(CUBE_STATE_T *state)
         {
           glActiveTexture(GL_TEXTURE0);
           glBindTexture(GL_TEXTURE_2D, state->effect_texture);
-          glEnable(GL_BLEND);
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+          check();
+          //glEnable(GL_BLEND);
+          //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
-        check();
-	float alpha = 0.0f * M_PI /180.0f;
-        float scaling = 0.5f;
-        const GLfloat rotationMatrix[] = {
-		    scaling*cosf(alpha), -scaling*sinf(alpha), 0.0f, 0.0f,
-		    scaling*sinf(alpha),  scaling*cosf(alpha), 0.0f, 0.0f,
-		    0.5f,                 0.5f,                1.0f, 0.0f,
-                    0.0f,                 0.0f,                0.0f, 1.0f,
-	};
         glUniform3f(state->uResolution, state->width, state->height, 1.0f);
-        check();
         glUniform2f(state->uMouse, state->mousex, state->mousey);
-        check();
         glUniform1f(state->uTime, state->time);
-        check();        
         glUniform1i(state->uChannel0, 0); // first currently bound texture "GL_TEXTURE0"
-        glUniform1i(state->uChannel1, 1); // first currently bound texture "GL_TEXTURE1"
-        glUniform1i(state->uChannel2, 2); // first currently bound texture "GL_TEXTURE2"
-        glUniform1i(state->uChannel3, 3); // first currently bound texture "GL_TEXTURE3"
+        if (state->effect_fb)
+          glUniform2f(state->uScale, (GLfloat)state->width/state->fbwidth, (GLfloat)state->height/state->fbheight);
+        else
+          glUniform2f(state->uScale, 1.0, 1.0);
         check();
 
         glVertexAttribPointer(state->attr_vertex, 4, GL_FLOAT, 0, 16, 0);
@@ -351,8 +337,8 @@ static void draw_effect_to_texture(CUBE_STATE_T *state)
 
         glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
         check();
-	glDisableVertexAttribArray(state->attr_vertex);
 
+	glDisableVertexAttribArray(state->attr_vertex);
         glBindTexture(GL_TEXTURE_2D, 0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         check();
@@ -377,16 +363,9 @@ static void draw_triangles(CUBE_STATE_T *state)
         glUniform1i(state->uTexture, 0); // first currently bound texture "GL_TEXTURE0"
         check();
 
-	const GLfloat rotationMatrix[] = {
-		    0.5f, 0.0f, 0.5f, 0.0f,
-		    0.0f, 0.5f, 0.5f, 0.0f,
-		    0.0f, 0.0f, 1.0f, 0.0f,
-		    0.0f, 0.0f, 0.0f, 1.0f,
-	};
-        glUniformMatrix4fv(state->uRenderMatrix, 1, 0, rotationMatrix);
-        check();
         glVertexAttribPointer(state->attr_vertex, 4, GL_FLOAT, 0, 16, 0);
         glEnableVertexAttribArray(state->attr_vertex);
+        check();
 
         glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
         check();
@@ -449,53 +428,52 @@ void setup_screensaver_default(CUBE_STATE_T *state)
   state->effect_vshader_source = TO_STRING(
          attribute vec4 vertex;
          varying vec2 vTextureCoord;
+         uniform vec2 uScale;
+         void main(void)
+         {
+            gl_Position = vertex;
+            vTextureCoord = vertex.xy*0.5+0.5;
+            vTextureCoord.x = vTextureCoord.x * uScale.x;
+            vTextureCoord.y = vTextureCoord.y * uScale.y;
+         }
+  );
+  state->effect_fshader_source = TO_STRING(
+	varying vec2 vTextureCoord;
+	uniform float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0;
+  );
+  state->render_vshader_source = TO_STRING(
+         attribute vec4 vertex;
+         varying vec2 vTextureCoord;
          void main(void)
          {
             gl_Position = vertex;
             vTextureCoord = vertex.xy*0.5+0.5;
          }
   );
-  state->effect_fshader_source = TO_STRING(
-	precision lowp float;
-	varying vec2 vTextureCoord;
-	uniform highp float iGlobalTime;
-	uniform vec3 iResolution;
-	uniform vec2 iMouse;
-	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
-  );
-  state->render_vshader_source = TO_STRING(
-         attribute vec4 vertex;
-         varying vec2 vTextureCoord;
-         uniform mat4 modelViewProjectionMatrix;
-         void main(void)
-         {
-             vec4 r = modelViewProjectionMatrix * vertex;
-             gl_Position = r;
-             vTextureCoord = r.xy*0.5+0.5;
-         }
-  );
   state->render_fshader_source = TO_STRING(
-         uniform sampler2D uTexture;
          varying vec2 vTextureCoord;
+         uniform sampler2D uTexture;
          void main(void)
          {
-            vec4 texture = texture2D(uTexture, vTextureCoord);
-            gl_FragColor = texture;
+            gl_FragColor = texture2D(uTexture, vTextureCoord);
+            //gl_FragColor = vec4(vTextureCoord.x, vTextureCoord.y, 0.0, 1.0);
          }
   );
 }
 
 void setup_screensaver_plasma(CUBE_STATE_T *state)
 {
-  state->fbwidth = 960;
-  state->fbheight = 540;
+  state->fbwidth = 960; state->fbheight = 540;
   state->effect_fshader_source = TO_STRING(
 	precision lowp float;
 	varying vec2 vTextureCoord;
 	uniform highp float iGlobalTime;
 	uniform vec3 iResolution;
 	uniform vec2 iMouse;
-	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+	uniform sampler2D iChannel0;
 
 	float     u_time=iGlobalTime*0.2;
         vec2      u_k = vec2(32.0, 32.0);
@@ -520,15 +498,14 @@ void setup_screensaver_plasma(CUBE_STATE_T *state)
 
 void setup_screensaver_plasma2(CUBE_STATE_T *state)
 {
-  state->fbwidth = 960;
-  state->fbheight = 540;
+  state->fbwidth = 640; state->fbheight = 360;
   state->effect_fshader_source = TO_STRING(
 	precision lowp float;
 	varying vec2 vTextureCoord;
 	uniform highp float iGlobalTime;
 	uniform vec3 iResolution;
 	uniform vec2 iMouse;
-	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+	uniform sampler2D iChannel0;
 
 	float     u_time=iGlobalTime*0.2;
         vec2      u_k = vec2(32.0, 32.0);
@@ -569,17 +546,18 @@ void setup_screensaver_border(CUBE_STATE_T *state)
   state->fbwidth = state->fbheight = 256;
   state->effect_texture_data = create_border_tex(state->texwidth, state->texheight);
   state->effect_fshader_source = TO_STRING(
-	precision lowp float;
 	varying vec2 vTextureCoord;
-	uniform highp float iGlobalTime;
+	uniform float iGlobalTime;
 	uniform vec3 iResolution;
 	uniform vec2 iMouse;
-	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+	uniform sampler2D iChannel0;
 
          void main(void)
          {
-            vec4 texture = texture2D(iChannel0, vTextureCoord);
+            vec2 v = vTextureCoord;
+            vec4 texture = texture2D(iChannel0, v);
             gl_FragColor = texture;
+            //gl_FragColor = vec4(vTextureCoord.x, vTextureCoord.y, 0.0, 1.0);
          }
   );
 }
@@ -587,10 +565,9 @@ void setup_screensaver_border(CUBE_STATE_T *state)
 
 void setup_screensaver_interstellar(CUBE_STATE_T *state)
 {
-  state->texwidth = state->texheight = 256;
+  state->texwidth = 256; state->texheight = 256;
   state->effect_texture_data = create_noise_tex(state->texwidth, state->texheight);
-  state->fbwidth = 256;
-  state->fbheight = 256;
+  state->fbwidth = 640; state->fbheight = 360;
 
   state->effect_fshader_source = TO_STRING(
 	precision lowp float;
@@ -598,45 +575,33 @@ void setup_screensaver_interstellar(CUBE_STATE_T *state)
 	uniform highp float iGlobalTime;
 	uniform vec3 iResolution;
 	uniform vec2 iMouse;
-	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+	uniform sampler2D iChannel0;
 
 	const float tau = 6.28318530717958647692;
 	vec4 Noise( in ivec2 x )
 	{
 		return texture2D( iChannel0, (vec2(x)+0.5)/256.0, -100.0 );
 	}
-
-	vec4 Rand( in int x )
-	{
-		vec2 uv;
-		uv.x = (float(x)+0.5)/256.0;
-		uv.y = (floor(uv.x)+0.5)/256.0;
-		return texture2D( iChannel0, uv, -100.0 );
-	}
-
 	void main()
 	{
-		vec3 ray;
-		ray.xy = vTextureCoord - vec2(0.25);
-		ray.z = 1.0;
-
+		vec3 ray = vec3(vTextureCoord - vec2(0.5), 1.0);
 		float offset = iGlobalTime*.5;	
 		float speed2 = (cos(offset)+1.0)*2.0;
 		float speed = speed2+.1;
+		float ispeed = 1.0/speed;
 		offset += sin(offset)*.96;
-		offset *= 2.0;
-
-		vec3 col = vec3(0);	
+		offset *= 2.0;	
+		vec3 col = vec3(0);
 		vec3 stp = ray/max(abs(ray.x),abs(ray.y));
 		vec3 pos = 2.0*stp+.5;
-		for ( int i=0; i < 14; i++ )
+		for ( int i=0; i < 10; i++ )
 		{
 			float z = Noise(ivec2(pos.xy)).x;
 			z = fract(z-offset);
 			float d = 50.0*z-pos.z;
-			float w = pow(max(0.0,1.0-8.0*length(fract(pos.xy)-.5)),2.0);
-			vec3 c = max(vec3(0),vec3(1.0-abs(d+speed2*.5)/speed,1.0-abs(d)/speed,1.0-abs(d-speed2*.5)/speed));
-			col += 1.5*(1.0-z)*c*w;
+			float w = max(0.0, 1.0-8.0*length(fract(pos.xy)-.5));
+			vec3 c = max(vec3(0), vec3(1.0-abs(d+speed2*.5)*ispeed,1.0-abs(d)*ispeed,1.0-abs(d-speed2*.5)*ispeed));
+			col += 1.5*(1.0-z)*c*w*w;
 			pos += stp;
 		}
 		gl_FragColor = vec4(col,1.0);
@@ -646,13 +611,14 @@ void setup_screensaver_interstellar(CUBE_STATE_T *state)
 
 void setup_screensaver_noise(CUBE_STATE_T *state)
 {
-   state->effect_fshader_source = TO_STRING(
+  state->fbwidth = 960; state->fbheight = 540;
+  state->effect_fshader_source = TO_STRING(
 	precision lowp float;
 	varying vec2 vTextureCoord;
 	uniform highp float iGlobalTime;
 	uniform vec3 iResolution;
 	uniform vec2 iMouse;
-	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+	uniform sampler2D iChannel0;
 
 	float     time=iGlobalTime*0.1;
 	float pi = 3.14159265;
@@ -686,10 +652,26 @@ void setup_screensaver_warp(CUBE_STATE_T *state)
 	uniform highp float iGlobalTime;
 	uniform vec3 iResolution;
 	uniform vec2 iMouse;
-	uniform sampler2D iChannel0, iChannel1, iChannel2, iChannel3;
+	uniform sampler2D iChannel0;
 
 	float     time=iGlobalTime*0.1;
 	float pi = 3.14159265;
+
+	void main()
+	{
+	precision lowp float;
+	varying vec2 vTextureCoord;
+	uniform highp float iGlobalTime;
+	uniform vec3 iResolution;
+	uniform vec2 iMouse;
+	uniform sampler2D iChannel0;
+
+	float     time=iGlobalTime*0.1;
+	float pi = 3.14159265;
+	float sin_4000 = 0.6427876097;
+	float cos_4000 = 0.7660444431;
+	float sin_6000 = -0.8660254038;
+	float cos_6000 = -0.5;
 
 	void main()
 	{
@@ -699,15 +681,15 @@ void setup_screensaver_warp(CUBE_STATE_T *state)
 	  float c2 = 1.0-2.0*s*s;
 	  float s3 = s2*c + c2*s;
 	  float c3 = c2*c - s2*s;
-	  float ss = s2*cos(4000.0)+c2*sin(4000.0);
-	  float cc = c3*cos(6000.0)-s3*sin(6000.0);
+	  float ss = s2*cos_4000+c2*sin_4000;
+	  float cc = c3*cos_6000-s3*sin_6000;
 	  vec2 position  = vec2(0.5+0.5*s2,                     0.5+0.5*c3);
 	  vec2 position2 = vec2(0.5+0.5*ss, 0.5+0.5*cc);
 	  vec2 offset2   = vec2(6.0*sin(time*1.1),              3.0*cos(time*1.1));
 	  vec2 oldPos = vTextureCoord.xy - vec2(0.5, 0.5);
 	  vec2 newPos = vec2(oldPos.x * c2 - oldPos.y * s2,
 		             oldPos.y * c2 + oldPos.x * s2);
-	  newPos = (newPos)*(0.8+0.2*s3)-offset2;
+	  newPos = (newPos)*(1.0+0.2*s3)-offset2;
 	  vec2 temp = newPos;
 	  float beta = sin(temp.y*2.0+time*8.0);
 	  newPos.x = temp.x + 0.4*beta;
@@ -852,7 +834,7 @@ again:
    state->width = eglstate->screen_width;
    state->height = eglstate->screen_height;
    setup_screensaver_default(state);
-   setup_screensaver_border(state);
+   setup_screensaver_interstellar(state);
    screensaver_init(state);
    screensaver_init_shaders(state);
 

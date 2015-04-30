@@ -21,10 +21,10 @@ typedef struct
    GLuint effect_texture;
    void *effect_texture_data;
 // effect attribs
-   GLuint uTime, uResolution, uMouse;
-   GLuint uChannel0, uChannel1, uChannel2, uChannel3;
+   GLuint uTime, uScale, uResolution, uMouse;
+   GLuint uChannel0;
 // render attribs
-   GLuint attr_vertex, uRenderMatrix, uTexture;
+   GLuint attr_vertex, uTexture;
    uint64_t last_time;
    float _c[NUMCONSTS];
    float _ct[NUMCONSTS];
