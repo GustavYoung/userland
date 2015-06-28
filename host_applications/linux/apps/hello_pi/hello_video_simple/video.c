@@ -180,7 +180,7 @@ int main (int argc, char **argv)
 {
    OMX_DISPLAYRECTTYPE dest_rect = {0};
    if (argc > 4)
-     dest_rect.x_offset = atoi(argv[1]), dest_rect.y_offset = atoi(argv[1]), dest_rect.width = atoi(argv[3]), dest_rect.height = atoi(argv[4]);
+     dest_rect.x_offset = atoi(argv[1]), dest_rect.y_offset = atoi(argv[2]), dest_rect.width = atoi(argv[3]), dest_rect.height = atoi(argv[4]);
    bcm_host_init();
    return video_decode_test(dest_rect);
 }
