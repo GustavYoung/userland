@@ -271,12 +271,15 @@ static int test_mmal_setup(decoder_state_t *state, stream_info_t m_hints)
   return status;
 }
 
-static int test_mmal_decode(decoder_state_t *state, stream_info_t m_hints, const char *filename)
+static int test_mmal_decode(decoder_state_t *state, stream_info_t m_hints, const char *filename, const char *outfilename)
 {
   MMAL_STATUS_T status;
-  FILE *in;
+  FILE *in, *out = NULL;
   if((in = fopen(filename, "rb")) == NULL)
     return -2;
+  if (outfilename && (out = fopen(outfilename, "wb")) == NULL)
+    return -2;
+
   while (1)
   {
     MMAL_BUFFER_HEADER_T *buffer = mmal_queue_timedwait(state->m_dec_input_pool->queue, 10);
@@ -316,6 +319,10 @@ static int test_mmal_decode(decoder_state_t *state, stream_info_t m_hints, const
           int eos = buffer->flags & MMAL_BUFFER_HEADER_FLAG_EOS;
           LogD("got decoded buffer:%p buffer_size(%u) dts:%.3f pts:%.3f flags:%x:%x",
              buffer, buffer->length, buffer->dts*1e-6, buffer->pts*1e-6, buffer->flags, buffer->type->video.flags);
+
+          if (out && m_hints.m_encoding == MMAL_ENCODING_I420)
+            fwrite(buffer->data, 1, buffer->length, out);
+
           mmal_buffer_header_reset(buffer);
           buffer->cmd = 0;
           LogD("Sending buffer:%p to dec_output", buffer);
@@ -338,6 +345,8 @@ static int test_mmal_decode(decoder_state_t *state, stream_info_t m_hints, const
     }
   }
   fclose(in);
+  if (out)
+    fclose(out);
   return 0;
 }
 
@@ -385,7 +394,7 @@ int main(int argc, char **argv)
   }
   bcm_host_init();
   test_mmal_setup(&decoder_state, m_hints);
-  test_mmal_decode(&decoder_state, m_hints, argv[1]);
+  test_mmal_decode(&decoder_state, m_hints, argv[1], argc >=3 ? argv[2]:NULL);
   test_mmal_destroy(&decoder_state, m_hints);
   return 0;
 }
